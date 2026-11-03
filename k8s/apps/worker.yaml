@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: worker}
+  template:
+    metadata:
+      labels: {app: worker}
+    spec:
+      containers:
+        - name: worker
+          image: foodee/backend:poc
+          imagePullPolicy: Never
+          command: [npm, run, start:worker]
+          envFrom:
+            - configMapRef: {name: foodee-config}
+          env:
+            - {name: NODE_ENV, value: development}
+            - {name: QUEUE_PROCESSOR_ENABLED, value: "true"}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: foodee-secrets, key: DB_PASSWORD}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: {name: foodee-secrets, key: JWT_SECRET}
+            - name: AI_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef: {name: foodee-secrets, key: AI_SERVICE_TOKEN}
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: foodee-secrets, key: MINIO_ACCESS_KEY}
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: foodee-secrets, key: MINIO_SECRET_KEY}
+            - name: MAPBOX_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef: {name: foodee-secrets, key: MAPBOX_ACCESS_TOKEN}

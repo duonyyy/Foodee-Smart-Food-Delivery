@@ -1,5 +1,7 @@
 # 🗄️ Thiết kế Cơ sở Dữ liệu & Mô hình Thực thể (Database Design & ERD)
 
+> **Lưu ý (2026-10-05):** ERD và một số mô tả bên dưới là bản khái niệm cũ, có quan hệ và tên bảng không khớp migration hiện tại. Xem [ERD đối chiếu entity và migration](ERD_DATABASE.md) khi cần sơ đồ database chính xác theo mã nguồn. Schema trên máy chủ vẫn cần kiểm tra trực tiếp.
+
 > Tài liệu này mô tả chi tiết kiến trúc cơ sở dữ liệu quan hệ **PostgreSQL 16**, mô hình quan hệ thực thể (ERD), máy trạng thái đơn hàng (Order State Machine), cơ chế Transactional Outbox Pattern và chiến lược tối ưu hóa hiệu năng trong hệ thống **Foodee**.
 
 ---

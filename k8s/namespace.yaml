@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: foodee-poc
+  labels:
+    app.kubernetes.io/part-of: foodee
+    app.kubernetes.io/environment: poc

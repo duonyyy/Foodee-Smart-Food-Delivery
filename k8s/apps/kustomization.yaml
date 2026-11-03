@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: foodee-poc
+resources:
+  - api.yaml
+  - worker.yaml
+  - chatbot.yaml
+  - vision.yaml
+  - frontend.yaml
