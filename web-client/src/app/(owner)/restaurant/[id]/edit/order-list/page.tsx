@@ -24,8 +24,7 @@ import {
   LayoutGrid,
   Search,
 } from "lucide-react";
-import { useSubscription } from "@apollo/client";
-import { ORDER_STATUS_SUBSCRIPTION } from "@/lib/graphql/subscriptions/orderSubscriptions";
+import { useOrderSocket } from "@/shared/socket";
 import { adminService } from "@/api/admin";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageHeader } from "@/components/ui/page-header";
@@ -269,32 +268,29 @@ export default function OrderListPage() {
     setSelectedOrder(null);
   };
 
-  const OrderStatusSubscriber = ({ order }: { order: Order }) => {
-    useSubscription(ORDER_STATUS_SUBSCRIPTION, {
-      variables: { orderId: order.id },
-      onData: ({ data }) => {
-        if (data.data?.orderStatusUpdated) {
-          const updated = data.data.orderStatusUpdated;
-          const updater = (prev: Order[]) =>
-            prev.map((o) => (o.id === order.id ? { ...o, status: updated.status } : o));
-          setAllOrders(updater);
-        }
-      },
-    });
-    return null;
-  };
-
-  // Incomplete orders
-  const incompleteOrders = allOrders.filter(
-    (order) => order.status !== "completed" && order.status !== "canceled"
-  );
+  // Real-time order updates and new orders via Socket.io
+  useOrderSocket({
+    restaurantId,
+    onStatusUpdated: (payload) => {
+      if (payload?.orderId) {
+        setAllOrders((prev) =>
+          prev.map((o) => (o.id === payload.orderId ? { ...o, status: payload.status } : o))
+        );
+      }
+    },
+    onOrderCreated: (payload) => {
+      if (payload?.order) {
+        setAllOrders((prev) => {
+          if (prev.some((o) => o.id === payload.orderId)) return prev;
+          return [payload.order as Order, ...prev];
+        });
+        toast.info(`Có đơn hàng mới #${payload.orderId.slice(-6).toUpperCase()}`);
+      }
+    },
+  });
 
   return (
     <div className="py-2 px-1 sm:px-2 max-w-6xl mx-auto space-y-6">
-      {/* Realtime Subscription Watchers */}
-      {incompleteOrders.map((order) => (
-        <OrderStatusSubscriber key={order.id} order={order} />
-      ))}
 
       {/* 1. Header */}
       <PageHeader

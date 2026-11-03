@@ -28,11 +28,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSubscription } from "@apollo/client";
-import {
-  MESSAGE_SENT_SUBSCRIPTION,
-  MESSAGES_READ_SUBSCRIPTION,
-} from "@/lib/graphql/subscriptions/messengerSubscriptions";
+import { useChatSocket } from "@/shared/socket";
 import { Textarea } from "@/components/ui/textarea";
 
 const QUICK_REPLIES = [
@@ -60,81 +56,64 @@ const RestaurantMessengerPage = () => {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Subscription for new messages in selected conversation
-  const { data: newMessageData, error: messageError } = useSubscription(
-    MESSAGE_SENT_SUBSCRIPTION,
-    {
-      variables: { conversationId: selectedConversation?.id || "" },
-      skip: !selectedConversation?.id,
-      onError: (error) => {
-        console.error("Message subscription error:", error);
-        setConnectionError("Không thể kết nối dịch vụ chat thời gian thực");
-      },
-      onData: ({ data }) => {
-        if (data.data?.messageSent) {
-          const newMsg = data.data.messageSent;
-          setShouldAutoScroll(true);
+  // Real-time messages & read receipts via Socket.io
+  useChatSocket({
+    conversationId: selectedConversation?.id,
+    onMessageSent: (payload) => {
+      const newMsg = payload.message as Message;
+      if (!newMsg) return;
 
-          setMessages((prev) => {
-            if (prev.some((msg) => msg.id === newMsg.id)) {
-              return prev;
-            }
-            const hasTemp = prev.some(
-              (msg) =>
-                msg.id.startsWith("temp_") &&
-                msg.content === newMsg.content &&
-                msg.sender.id === newMsg.sender.id,
-            );
-            if (hasTemp) {
-              return prev.map((msg) =>
-                msg.id.startsWith("temp_") &&
-                msg.content === newMsg.content &&
-                msg.sender.id === newMsg.sender.id
-                  ? newMsg
-                  : msg,
-              );
-            }
-            return [...prev, newMsg];
-          });
+      setShouldAutoScroll(true);
 
-          setConversations((prev) =>
-            prev.map((conv) =>
-              conv.id === newMsg.conversation.id
-                ? {
-                    ...conv,
-                    lastMessage: newMsg.content,
-                    lastMessageAt: new Date(newMsg.createdAt),
-                  }
-                : conv,
-            ),
+      setMessages((prev) => {
+        if (prev.some((msg) => msg.id === newMsg.id)) {
+          return prev;
+        }
+        const hasTemp = prev.some(
+          (msg) =>
+            msg.id.startsWith("temp_") &&
+            msg.content === newMsg.content &&
+            msg.sender.id === newMsg.sender.id,
+        );
+        if (hasTemp) {
+          return prev.map((msg) =>
+            msg.id.startsWith("temp_") &&
+            msg.content === newMsg.content &&
+            msg.sender.id === newMsg.sender.id
+              ? newMsg
+              : msg,
           );
         }
-      },
-    },
-  );
+        return [...prev, newMsg];
+      });
 
-  // Subscription for read receipts
-  const { data: messagesReadData, error: readError } = useSubscription(
-    MESSAGES_READ_SUBSCRIPTION,
-    {
-      variables: { conversationId: selectedConversation?.id || "" },
-      skip: !selectedConversation?.id,
-      onError: (error) => {
-        console.error("Read receipts subscription error:", error);
-      },
-      onData: ({ data }) => {
-        if (data.data?.messagesRead) {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.sender.id === user?.id
-                ? { ...msg, isRead: true, readAt: new Date() }
-                : msg,
-            ),
-          );
-        }
-      },
+      const convId =
+        typeof newMsg.conversation === "object" && newMsg.conversation
+          ? newMsg.conversation.id
+          : ((newMsg.conversation as string) || payload.conversationId);
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === convId
+            ? {
+                ...conv,
+                lastMessage: newMsg.content,
+                lastMessageAt: new Date(newMsg.createdAt),
+              }
+            : conv,
+        ),
+      );
     },
-  );
+    onMessagesRead: (payload) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.sender.id === user?.id
+            ? { ...msg, isRead: true, readAt: new Date() }
+            : msg,
+        ),
+      );
+    },
+  });
 
   const loadConversations = useCallback(async () => {
     try {

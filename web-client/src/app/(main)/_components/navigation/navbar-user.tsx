@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { authService } from "@/api/auth";
@@ -22,8 +21,7 @@ import { useAuth } from "@/context/auth-context";
 import { useCart } from "@/context/cart-context";
 import { useCartDrawer } from "@/context/cart-drawer-context";
 import type { Notification } from "@/interface"; // adjust path as needed
-import { NOTIFICATION_ADDED_SUBSCRIPTION } from "@/lib/graphql/subscriptions/notificationSubscriptions";
-import { gql, useSubscription } from "@apollo/client";
+import { useNotificationSocket } from "@/shared/socket";
 import {
   BellIcon,
   LogOutIcon,
@@ -44,19 +42,7 @@ type NotificationItem = {
   isRead?: boolean | null;
 };
 
-const GET_USER_NOTIFICATIONS = gql`
-  query GetUserNotifications {
-    getUserNotifications {
-      id
-      content
-      description
-      createdAt
-      isRead
-      type
-      receiveUser
-    }
-  }
-`;
+
 
 export default function UserActions({ openModal }: UserActionsProps) {
   const router = useRouter();
@@ -69,12 +55,11 @@ export default function UserActions({ openModal }: UserActionsProps) {
   >([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const { data: notificationData } = useSubscription<{
-    notificationAdded: Notification;
-  }>(NOTIFICATION_ADDED_SUBSCRIPTION, {
-    skip: !user?.id,
-    onData: ({ data }) => {
-      const notif = data.data?.notificationAdded;
+  // Realtime notifications via Socket.io
+  useNotificationSocket({
+    userId: user?.id,
+    onNotification: (payload) => {
+      const notif = payload.notification;
       if (notif) {
         setNotifications((prev) => [
           {
@@ -95,7 +80,7 @@ export default function UserActions({ openModal }: UserActionsProps) {
         // Play sound
         if (audioRef.current) {
           audioRef.current.currentTime = 0;
-          audioRef.current.play();
+          audioRef.current.play().catch(() => {});
         }
       }
     },

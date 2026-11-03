@@ -28,10 +28,10 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useSubscription } from "@apollo/client";
-import { SHIPPER_LOCATION_SUBSCRIPTION } from "@/lib/graphql/subscriptions/shipperSubscriptions";
+import { useOrderSocket, useDeliverySocket } from "@/shared/socket";
+// replaced gql with socket.io
 import type { AdminOrderDetail } from "@/api/admin";
-import { ORDER_STATUS_SUBSCRIPTION } from "@/lib/graphql/subscriptions/orderSubscriptions";
+// replaced gql with socket.io
 
 // Dynamic imports for modal dialogs and map
 const RatingModal = dynamic(() => import("./_components/rating-modal"), { ssr: false });
@@ -99,26 +99,29 @@ export interface ShipperLocation {
   updatedAt: string; // or Date, but GraphQL usually returns ISO string
 }
 
-// --- Child component for shipper location subscription ---
+// --- Child component for shipper location via Socket.io ---
 function ShipperLocationSubscriber({
   shipperId,
+  orderId,
   onData,
 }: {
   shipperId: string;
+  orderId?: string;
   onData: (data: { shipperLocationUpdated: ShipperLocation }) => void;
 }) {
-  console.log("[DEBUG] ShipperLocationSubscriber mounted with shipperId:", shipperId);
-  useSubscription(SHIPPER_LOCATION_SUBSCRIPTION, {
-    variables: { shipperId },
-    skip: !shipperId,
-    onData: ({ data }) => {
-      if (data?.data?.shipperLocationUpdated) {
-        console.log("[DEBUG] ShipperLocationSubscriber received:", data.data.shipperLocationUpdated);
-        onData({ shipperLocationUpdated: data.data.shipperLocationUpdated });
-      } else {
-        console.log("[DEBUG] ShipperLocationSubscriber received no valid data:", data);
-      }
-    }
+  useDeliverySocket({
+    shipperId,
+    orderId,
+    onLocationUpdated: (payload) => {
+      onData({
+        shipperLocationUpdated: {
+          shipperId: payload.shipperId,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          updatedAt: payload.updatedAt,
+        },
+      });
+    },
   });
   return null;
 }
@@ -134,8 +137,6 @@ export default function OrderDetailPage() {
   const userId = user?.id;
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | undefined>(undefined);
 
-  // Track when order is fetched
-  const [orderFetched, setOrderFetched] = useState(false);
   const [shipperLocationData, setShipperLocationData] = useState<{ shipperLocationUpdated: ShipperLocation } | null>(null);
 
   useEffect(() => {
@@ -151,90 +152,45 @@ export default function OrderDetailPage() {
         console.error("Failed to fetch order", err);
       } finally {
         setLoading(false);
-        setOrderFetched(true); // Mark as fetched
       }
     };
 
     fetchOrder();
   }, [orderId, getToken]);
 
-  // Only subscribe after order is fetched
-  const { data: orderStatusData } = useSubscription(ORDER_STATUS_SUBSCRIPTION, {
-    variables: { userId },
-    skip: !userId || !orderFetched,
-  });
+  const handleReviewSubmitted = async () => {
+    const token = getToken ? getToken() : null;
+    if (!token || !orderId) return;
 
-
-  // Mount the shipper location subscription only when shipperId is available
-  // This ensures the subscription is always correct
-  // shipperLocationData will be updated via setShipperLocationData
-  // You can move ShipperLocationSubscriber to another file if you want to reuse it elsewhere
-  // but it's fine to keep it here if only used in this page
-
-  useEffect(() => {
-    if (shipperLocationData) {
-      console.log("[DEBUG] FE shipperLocationData state updated:", shipperLocationData);
+    try {
+      const res = await adminService.Order.getOrderById(token, orderId);
+      setOrder(res);
+    } catch (err) {
+      console.error("Failed to refresh order", err);
     }
-  }, [shipperLocationData]);
-
-  const handleReviewSubmitted = () => {
-    // Refresh order data after review is submitted
-    const refreshOrder = async () => {
-      const token = await getToken();
-      if (!token || !orderId) return;
-
-      try {
-        const res = await adminService.Order.getOrderById(token, orderId);
-        setOrder(res);
-      } catch (err) {
-        console.error("Failed to refresh order", err);
-      }
-    };
-
-    refreshOrder();
   };
 
-  // Handle order status updates
-  useEffect(() => {
-    if (
-      orderStatusData?.orderStatusUpdated &&
-      order &&
-      order.id === orderStatusData.orderStatusUpdated.id &&
-      order.status !== orderStatusData.orderStatusUpdated.status // Only update if status actually changed
-    ) {
-      setOrder((prev) =>
-        prev
-          ? { ...prev, status: orderStatusData.orderStatusUpdated.status }
-          : prev
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderStatusData, order?.id]);
+  // Real-time order status tracking via Socket.io
+  useOrderSocket({
+    orderId,
+    userId,
+    onStatusUpdated: (payload) => {
+      if (payload && payload.orderId === orderId) {
+        setOrder((prev) =>
+          prev && prev.status !== payload.status
+            ? { ...prev, status: payload.status }
+            : prev
+        );
 
-  // Fetch order again when status changes to 'shipper_received' or 'delivering'
-  useEffect(() => {
-    if (
-      orderStatusData?.orderStatusUpdated &&
-      order &&
-      order.id === orderStatusData.orderStatusUpdated.id &&
-      (orderStatusData.orderStatusUpdated.status === "shipper_received" || 
-       orderStatusData.orderStatusUpdated.status === "delivering") // <-- Include both statuses
-    ) {
-      const fetchOrder = async () => {
-        const token = await getToken();
-        if (!token || !orderId) return;
-        try {
-          console.log(`[DEBUG] Refetching order due to status change: ${orderStatusData.orderStatusUpdated.status}`);
-          const res = await adminService.Order.getOrderById(token, orderId);
-          setOrder(res);
-        } catch (err) {
-          console.error("Failed to fetch order after status update", err);
+        if (payload.status === "shipper_received" || payload.status === "delivering") {
+          const token = getToken ? getToken() : null;
+          if (token && orderId) {
+            adminService.Order.getOrderById(token, orderId).then(setOrder).catch(console.error);
+          }
         }
-      };
-      fetchOrder();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderStatusData, order?.id]);
+      }
+    },
+  });
 
   useEffect(() => {
     if (order) {
@@ -450,6 +406,7 @@ export default function OrderDetailPage() {
                       {order.shippingDetail && order.shippingDetail.shipper?.id && (
                         <ShipperLocationSubscriber
                           shipperId={order.shippingDetail.shipper.id}
+                          orderId={order.id}
                           onData={setShipperLocationData}
                         />
                       )}

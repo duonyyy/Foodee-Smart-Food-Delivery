@@ -1,6 +1,6 @@
-import { useSubscription } from '@apollo/client';
+import { useState } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { ORDER_STATUS_SUBSCRIPTION } from '@/lib/graphql/subscriptions/orderSubscriptions';
+import { useOrderSocket } from './use-order-socket';
 
 interface OrderStatusUpdate {
   id: string;
@@ -10,18 +10,24 @@ interface OrderStatusUpdate {
 
 export function useOrderStatusSubscription() {
   const { user } = useAuth();
-  
-  const { data, loading, error } = useSubscription(ORDER_STATUS_SUBSCRIPTION, {
-    variables: { userId: user?.id || '' },
-    skip: !user?.id,
-    onError: (error) => {
-      console.error('Order status subscription error:', error);
-    }
+  const [orderStatusUpdate, setOrderStatusUpdate] = useState<OrderStatusUpdate | null>(null);
+
+  const { isConnected } = useOrderSocket({
+    userId: user?.id,
+    onStatusUpdated: (payload) => {
+      if (payload) {
+        setOrderStatusUpdate({
+          id: payload.orderId,
+          status: payload.status,
+          updatedAt: payload.updatedAt,
+        });
+      }
+    },
   });
 
   return {
-    orderStatusUpdate: data?.orderStatusUpdated as OrderStatusUpdate | null,
-    loading,
-    error
+    orderStatusUpdate,
+    loading: !isConnected,
+    error: null,
   };
 }

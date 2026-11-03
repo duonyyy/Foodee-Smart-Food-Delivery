@@ -4,9 +4,7 @@
 import { apiRequest } from "@/api/base-api";
 import { useAuth } from "@/context/auth-context";
 import { OwnerNotification } from "@/interface";
-import { MESSAGE_SENT_SUBSCRIPTION } from "@/lib/graphql/subscriptions/messengerSubscriptions";
-import { ORDER_CREATED_SUBSCRIPTION } from "@/lib/graphql/subscriptions/orderSubscriptions";
-import { useSubscription } from "@apollo/client";
+import { useOrderSocket, useChatSocket } from "@/shared/socket";
 import React, {
   createContext,
   useContext,
@@ -61,12 +59,12 @@ export function OwnerNotificationProvider({
     }
   }, []);
 
-  // Order notifications
-  useSubscription(ORDER_CREATED_SUBSCRIPTION, {
-    variables: { restaurantId: restaurantId || "" },
-    skip: !user || !restaurantId,
-    onData: ({ data }) => {
-      const order = data?.data?.orderCreated;
+  // Order notifications via Socket.io
+  useOrderSocket({
+    restaurantId: restaurantId || "",
+    autoJoin: Boolean(user && restaurantId),
+    onOrderCreated: (payload) => {
+      const order = payload?.order;
       if (order) {
         setNotifications((prev) => [
           {
@@ -181,12 +179,11 @@ function MessageSubscription({
   onMessage: (msg: any) => void;
   audioRef: React.RefObject<HTMLAudioElement | null>;
 }) {
-  useSubscription(MESSAGE_SENT_SUBSCRIPTION, {
-    variables: { conversationId },
-    skip: !conversationId,
-    onData: ({ data }) => {
-      const msg = data?.data?.messageSent;
-      if (msg && msg.sender.id !== ownerId) {
+  useChatSocket({
+    conversationId,
+    onMessageSent: (payload) => {
+      const msg = payload?.message;
+      if (msg && msg.sender?.id !== ownerId) {
         onMessage(msg);
         if (audioRef.current) audioRef.current.play().catch(() => {});
       }

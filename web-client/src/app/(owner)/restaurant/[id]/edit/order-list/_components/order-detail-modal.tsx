@@ -3,8 +3,7 @@ import Image from 'next/image';
 import { X, User, MapPin, Clock, Phone, Package, DollarSign, Truck, MessageSquare, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useSubscription } from '@apollo/client';
-import { SHIPPER_LOCATION_SUBSCRIPTION } from '@/lib/graphql/subscriptions/shipperSubscriptions';
+import { useDeliverySocket } from '@/shared/socket';
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
@@ -21,7 +20,7 @@ export interface ShipperLocation {
   updatedAt: string;
 }
 
-// Shipper Location Subscriber component
+// Shipper Location Subscriber component via Socket.io
 function ShipperLocationSubscriber({
   shipperId,
   onData,
@@ -29,14 +28,18 @@ function ShipperLocationSubscriber({
   shipperId: string;
   onData: (data: { shipperLocationUpdated: ShipperLocation }) => void;
 }) {
-  useSubscription(SHIPPER_LOCATION_SUBSCRIPTION, {
-    variables: { shipperId },
-    skip: !shipperId,
-    onData: ({ data }) => {
-      if (data?.data?.shipperLocationUpdated) {
-        onData({ shipperLocationUpdated: data.data.shipperLocationUpdated });
-      }
-    }
+  useDeliverySocket({
+    shipperId,
+    onLocationUpdated: (payload) => {
+      onData({
+        shipperLocationUpdated: {
+          shipperId: payload.shipperId,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          updatedAt: payload.updatedAt,
+        },
+      });
+    },
   });
   return null;
 }

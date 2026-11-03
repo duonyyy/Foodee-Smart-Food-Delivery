@@ -8,8 +8,7 @@ import { useAuth } from '@/context/auth-context';
 import { Conversation, Message, ConversationType, SendMessageDto } from '@/interface';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { useSubscription } from '@apollo/client';
-import { MESSAGE_SENT_SUBSCRIPTION, MESSAGES_READ_SUBSCRIPTION } from '@/lib/graphql/subscriptions/messengerSubscriptions';
+import { useChatSocket } from '@/shared/socket';
 import { Textarea } from '@/components/ui/textarea';
 
 const MessengerPage = () => {
@@ -26,97 +25,64 @@ const MessengerPage = () => {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Subscription for new messages with better debugging - modified to match restaurant version
-  const { data: newMessageData, loading: subscriptionLoading, error: subscriptionError } = useSubscription(
-    MESSAGE_SENT_SUBSCRIPTION,
-    {
-      variables: { conversationId: selectedConversation?.id || '' },
-      skip: !selectedConversation?.id,
-      onError: (err) => {
-        console.error('💥 Subscription error:', err);
-        setConnectionError('Failed to connect to real-time messaging');
-      },
-      onData: ({ data }) => {
-        console.log('📨 New message received:', data.data);
-        if (data.data?.messageSent) {
-          const newMsg = data.data.messageSent;
-          
-          // Enable auto-scroll for new incoming messages
-          setShouldAutoScroll(true);
-          
-          // Add message to current conversation messages with proper deduplication
-          setMessages(prev => {
-            // Check if message already exists by ID to prevent duplicates
-            const exists = prev.some(msg => msg.id === newMsg.id);
-            if (exists) {
-              console.log('🔄 Message already exists, skipping:', newMsg.id);
-              return prev;
-            }
-            
-            // Also check for temporary messages that may need replacement
-            const hasTempVersion = prev.some(msg => 
-              msg.id.startsWith('temp_') && 
-              msg.content === newMsg.content && 
-              msg.sender.id === newMsg.sender.id
-            );
-            
-            if (hasTempVersion) {
-              console.log('🔄 Replacing temp message with real message:', newMsg.id);
-              return prev.map(msg => 
-                (msg.id.startsWith('temp_') && 
-                 msg.content === newMsg.content && 
-                 msg.sender.id === newMsg.sender.id) 
-                  ? newMsg 
-                  : msg
-              );
-            }
-            
-            console.log('✅ Adding new message to UI:', newMsg.id);
-            return [...prev, newMsg];
-          });
-          
-          // Update conversation last message
-          setConversations(prev => prev.map(conv => 
-            conv.id === newMsg.conversation.id 
-              ? { 
-                  ...conv, 
-                  lastMessage: newMsg.content, 
-                  lastMessageAt: new Date(newMsg.createdAt) 
-                }
-              : conv
-          ));
+  // Real-time messages & read receipts via Socket.io
+  const { isConnected } = useChatSocket({
+    conversationId: selectedConversation?.id,
+    onMessageSent: (payload) => {
+      const newMsg = payload.message as Message;
+      if (!newMsg) return;
+
+      setShouldAutoScroll(true);
+
+      setMessages((prev) => {
+        const exists = prev.some((msg) => msg.id === newMsg.id);
+        if (exists) return prev;
+
+        const hasTempVersion = prev.some(
+          (msg) =>
+            msg.id.startsWith('temp_') &&
+            msg.content === newMsg.content &&
+            msg.sender?.id === newMsg.sender?.id,
+        );
+
+        if (hasTempVersion) {
+          return prev.map((msg) =>
+            msg.id.startsWith('temp_') &&
+            msg.content === newMsg.content &&
+            msg.sender?.id === newMsg.sender?.id
+              ? newMsg
+              : msg,
+          );
         }
-      },
-    }
-  );
 
-  // Subscription for read receipts - also updated to match restaurant version
-  const { data: messagesReadData } = useSubscription(MESSAGES_READ_SUBSCRIPTION, {
-    variables: { conversationId: selectedConversation?.id || '' },
-    skip: !selectedConversation?.id,
-    onError: (error) => {
-      console.error('Read receipts subscription error:', error);
+        return [...prev, newMsg];
+      });
+
+      const convId =
+        typeof newMsg.conversation === 'object' && newMsg.conversation
+          ? newMsg.conversation.id
+          : ((newMsg.conversation as string) || payload.conversationId);
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === convId
+            ? {
+                ...conv,
+                lastMessage: newMsg.content,
+                lastMessageAt: new Date(newMsg.createdAt),
+              }
+            : conv,
+        ),
+      );
     },
-    onData: ({ data }) => {
-      console.log('📖 Read receipt received:', data);
-      if (data.data?.messagesRead) {
-        setMessages(prev => prev.map(msg => 
-          msg.sender.id === user?.id ? { ...msg, isRead: true, readAt: new Date() } : msg
-        ));
-      }
-    }
+    onMessagesRead: (payload) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.sender?.id === user?.id ? { ...msg, isRead: true, readAt: new Date() } : msg,
+        ),
+      );
+    },
   });
-
-  // Debug subscription status
-  useEffect(() => {
-    console.log('🔍 Subscription status:', {
-      selectedConversationId: selectedConversation?.id,
-      hasToken: !!token,
-      subscriptionLoading,
-      subscriptionError,
-      connectionError
-    });
-  }, [selectedConversation?.id, token, subscriptionLoading, subscriptionError, connectionError]);
 
   const loadConversations = useCallback(async () => {
     if (!token) return;
@@ -278,16 +244,13 @@ const MessengerPage = () => {
           {/* Connection Status */}
           <div className="mt-2 flex items-center space-x-4 text-sm">
             <div className={`flex items-center space-x-1 ${
-                  subscriptionLoading ? 'text-yellow-600' : 
-                  subscriptionError ? 'text-red-600' : 'text-green-600'
+                  isConnected ? 'text-green-600' : 'text-yellow-600'
                 }`}>
               <div className={`w-2 h-2 rounded-full ${
-                loading ? 'bg-yellow-400' : 
-                subscriptionError ? 'bg-red-400' : 'bg-green-400'
+                isConnected ? 'bg-green-400' : 'bg-yellow-400'
               }`}></div>
               <span>
-                {subscriptionLoading ? 'Connecting...' : 
-                 subscriptionError ? 'Disconnected' : 'Connected'}
+                {isConnected ? 'Connected' : 'Connecting...'}
               </span>
             </div>
             {selectedConversation && (

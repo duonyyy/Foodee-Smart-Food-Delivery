@@ -5,8 +5,7 @@ import { CartProvider } from "@/context/cart-context";
 import { CartDrawerProvider } from "@/context/cart-drawer-context";
 import { GeoLocationProvider } from "@/context/geolocation-context";
 import { AuthModalProvider } from "@/context/modal-context";
-import { apolloClient } from "@/lib/graphql/apolloClient";
-import { ApolloProvider } from "@apollo/client";
+import { SocketProvider } from "@/shared/socket/socket-context";
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 
@@ -24,7 +23,7 @@ export default function MainProviders({
   children: ReactNode;
 }) {
   return (
-    <ApolloProvider client={apolloClient}>
+    <SocketProvider>
       <NotificationProvider>
         <AuthModalProvider>
           <CartProvider>
@@ -38,6 +37,6 @@ export default function MainProviders({
           </CartProvider>
         </AuthModalProvider>
       </NotificationProvider>
-    </ApolloProvider>
+    </SocketProvider>
   );
 }
