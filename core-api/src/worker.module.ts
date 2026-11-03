@@ -4,7 +4,10 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import minioConfig from './config/minio.config';
 import { DeliveryModule, FindShipperProcessor } from './features/delivery/public-api';
+import { AppCacheModule } from './infra/cache/cache.module';
 import { DatabaseModule } from './infra/database/database.module';
+import { MapsModule } from './infra/mapbox/maps.module';
+import { StorageModule } from './infra/minio/storage.module';
 
 const deliveryRegistersProcessor = (
   Reflect.getMetadata(MODULE_METADATA.PROVIDERS, DeliveryModule) as unknown[]
@@ -23,6 +26,9 @@ const deliveryRegistersProcessor = (
       load: [minioConfig],
     }),
     DatabaseModule,
+    AppCacheModule,
+    StorageModule,
+    MapsModule,
     ScheduleModule.forRoot(),
     DeliveryModule,
   ],

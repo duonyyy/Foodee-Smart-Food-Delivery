@@ -17,6 +17,7 @@ import { CustomerOrdersController } from './controllers/customer-orders.controll
 import { MerchantOrdersController } from './controllers/merchant-orders.controller';
 import { OrderResolver } from './controllers/order.resolver';
 import { PublicOrdersController } from './controllers/public-orders.controller';
+import { OrderGateway } from './gateways/order.gateway';
 import { AdminOrdersService } from './services/admin-orders.service';
 import { CustomerOrdersService } from './services/customer-orders.service';
 import { MerchantOrdersService } from './services/merchant-orders.service';
@@ -63,6 +64,7 @@ import { PublicOrdersService } from './services/public-orders.service';
     PublicOrdersService,
     OrderMessagingService,
     OrderResolver,
+    OrderGateway,
     PaymentSucceededOrderHandler,
     DeliveryCompletedOrderHandler,
     DeliveryAssignmentRequestedOrderHandler,
@@ -80,6 +82,7 @@ import { PublicOrdersService } from './services/public-orders.service';
     OrderMessagingService,
     OrderDeliveryService,
     OrderAnalyticsService,
+    OrderGateway,
   ],
 })
 export class OrdersModule {}

@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InProcessEventBus } from 'src/common/events/in-process-event-bus.service';
@@ -16,6 +22,7 @@ import { PaymentService } from 'src/features/payments/public-api';
 import { pubSub } from 'src/pubsub';
 import { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 import { LessThan, Repository } from 'typeorm';
+import { OrderGateway } from '../gateways/order.gateway';
 import {
   InvalidOrderStatusError,
   InvalidOrderTransitionError,
@@ -36,6 +43,7 @@ export class AdminOrdersService {
     private readonly eventBus: InProcessEventBus,
     private readonly outboxService: OutboxService,
     private readonly paymentCheckoutCommands: PaymentService,
+    @Optional() private readonly orderGateway?: OrderGateway,
   ) {}
 
   /**
@@ -83,6 +91,7 @@ export class AdminOrdersService {
     const updatedOrder = await this.saveWithStatusEvent(order, previousStatus);
 
     await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: updatedOrder });
+    this.orderGateway?.notifyOrderStatusUpdated(updatedOrder);
     this.logger.log(`Admin updated order ${id} status to ${nextStatus}`);
 
     if (order.user?.id) {
@@ -137,6 +146,7 @@ export class AdminOrdersService {
 
     if (result.changed) {
       await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
+      this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
 
     return result.order;
@@ -182,7 +192,9 @@ export class AdminOrdersService {
 
     if (result.changed) {
       await pubSub.publish('orderCreated', { orderCreated: result.order });
+      this.orderGateway?.notifyOrderCreated(result.order);
       await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
+      this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
 
     return result.order;

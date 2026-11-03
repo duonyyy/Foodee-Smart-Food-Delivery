@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Optional,
   Param,
   Post,
   Query,
@@ -12,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from 'src/features/auth/public-api';
 import { AuthenticatedRequest } from 'src/shared/types/auth/authenticated-user.types';
+import { DeliveryGateway } from '../gateways/delivery.gateway';
 import { DeliveryDispatchService } from '../services/delivery-dispatch.service';
 import { DeliveryReportService } from '../services/delivery-report.service';
 import { ShipperDeliveryService } from '../services/shipper-delivery.service';
@@ -25,6 +27,7 @@ export class ShipperDeliveryController {
     protected readonly shipperDeliveryService: ShipperDeliveryService,
     protected readonly shipperProfileService: ShipperProfileService,
     protected readonly deliveryReportService: DeliveryReportService,
+    @Optional() protected readonly deliveryGateway?: DeliveryGateway,
   ) {}
 
   @Post('accept-order')
@@ -147,7 +150,9 @@ export class ShipperDeliveryController {
     @Req() req: AuthenticatedRequest,
   ) {
     const shipperId = req.user.uid || req.user.id;
-    return this.shipperProfileService.updateLocation(shipperId, latitude, longitude);
+    const result = await this.shipperProfileService.updateLocation(shipperId, latitude, longitude);
+    this.deliveryGateway?.notifyShipperLocationUpdated(shipperId, { latitude, longitude });
+    return result;
   }
 
   @Get('dashboard')

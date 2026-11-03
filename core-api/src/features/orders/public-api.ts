@@ -19,6 +19,7 @@ export { CreateOrderDto } from './dto/create-order.dto';
 export { PaymentDto } from './dto/payment.dto';
 export { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 export { ValidatePromotionDto } from './dto/validate-promotion.dto';
+export { OrderGateway } from './gateways/order.gateway';
 export { OrdersModule } from './orders.module';
 export { AdminOrdersService } from './services/admin-orders.service';
 export { CustomerOrdersService } from './services/customer-orders.service';

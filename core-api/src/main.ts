@@ -1,4 +1,5 @@
 import { ClassSerializerInterceptor, INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -10,6 +11,7 @@ import { allowedCorsOrigins } from './config/cors-origins';
 import { assertProductionConfiguration } from './config/production-config.guard';
 import { HttpRequestLoggingMiddleware } from './infra/logging/http-request-logging.middleware';
 import { StructuredLoggerService } from './infra/logging/structured-logger.service';
+import { SocketIoRedisAdapter } from './infra/websocket/public-api';
 
 async function bootstrap(): Promise<void> {
   assertProductionConfiguration();
@@ -44,6 +46,9 @@ async function bootstrap(): Promise<void> {
 
   const structuredLogger = app.get(StructuredLoggerService);
   app.useLogger(structuredLogger);
+
+  const configService = app.get(ConfigService);
+  app.useWebSocketAdapter(new SocketIoRedisAdapter(app, configService));
 
   const requestContextMiddleware = app.get(RequestContextMiddleware);
   const httpRequestLoggingMiddleware = app.get(HttpRequestLoggingMiddleware);

@@ -12,13 +12,13 @@ class Settings(BaseSettings):
 
     # Gemini
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_model: str = "gemini-3.5-flash-lite"
 
     # Local LLM (LM Studio / vLLM / Ollama)
     chat_llm_base_url: str = "http://127.0.0.1:1234/v1"
     chat_llm_model: str = "qwen/qwen2.5-vl-7b"
     chat_llm_temperature: float = 0.3
-    chat_llm_timeout_ms: int = 8000
+    chat_llm_timeout_ms: int = 20000
 
     # LLM Provider: "local" or "gemini"
     llm_provider: str = "local"

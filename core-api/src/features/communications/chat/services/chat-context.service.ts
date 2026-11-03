@@ -10,11 +10,13 @@ export class ChatContextService {
     private readonly orderMessaging: OrderMessagingService,
   ) {}
 
-  async getContext(userId: string): Promise<ChatContext> {
-    const [menu, orderHistory] = await Promise.all([
-      this.catalogReader.listAvailableFoods(),
-      this.orderMessaging.getRecentOrdersForReorder(userId, 5),
-    ]);
+  async getContext(userId?: string): Promise<ChatContext> {
+    const menuPromise = this.catalogReader.listAvailableFoods();
+    const orderHistoryPromise = userId
+      ? this.orderMessaging.getRecentOrdersForReorder(userId, 5).catch(() => [])
+      : Promise.resolve([]);
+
+    const [menu, orderHistory] = await Promise.all([menuPromise, orderHistoryPromise]);
 
     const orderedFoods =
       orderHistory?.flatMap((order) => order.orderDetails.map((detail) => detail.foodName)) ?? [];

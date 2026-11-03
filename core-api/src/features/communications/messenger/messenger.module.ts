@@ -7,6 +7,7 @@ import { AuthModule } from 'src/features/auth/auth-module.public-api';
 import { OrdersModule } from 'src/features/orders/public-api';
 import { RestaurantsModule } from 'src/features/restaurants/public-api';
 import { IdentityModule } from 'src/features/users/public-api';
+import { ChatGateway } from './gateways/chat.gateway';
 import { MessengerController } from './messenger.controller';
 import { MessengerResolver } from './messenger.resolver';
 import { MessengerService } from './messenger.service';
@@ -21,7 +22,7 @@ import { MessengerService } from './messenger.service';
     JwtModule,
   ],
   controllers: [MessengerController],
-  providers: [MessengerService, MessengerResolver],
-  exports: [MessengerService],
+  providers: [MessengerService, MessengerResolver, ChatGateway],
+  exports: [MessengerService, ChatGateway],
 })
 export class MessengerModule {}

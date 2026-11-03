@@ -7,8 +7,10 @@ import { MailModule } from 'src/infra/mail/public-api';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './guards/auth.guard';
+import { OptionalAuthGuard } from './guards/optional-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { WebSocketAuthGuard } from './guards/websocket-auth.guard';
+import { WsJwtGuard } from './guards/ws-jwt.guard';
 import { OtpService } from './services/otp.service';
 import { PasswordResetService } from './services/password-reset.service';
 import { SocialAuthService } from './services/social-auth.service';
@@ -36,9 +38,20 @@ import { SocialAuthService } from './services/social-auth.service';
     PasswordResetService,
     SocialAuthService,
     AuthGuard,
+    OptionalAuthGuard,
     RolesGuard,
     WebSocketAuthGuard,
+    WsJwtGuard,
   ],
-  exports: [AuthService, AuthGuard, RolesGuard, WebSocketAuthGuard, JwtModule],
+  exports: [
+    AuthService,
+    AuthGuard,
+    OptionalAuthGuard,
+    RolesGuard,
+    WebSocketAuthGuard,
+    WsJwtGuard,
+    JwtModule,
+    UsersModule,
+  ],
 })
 export class AuthModule {}

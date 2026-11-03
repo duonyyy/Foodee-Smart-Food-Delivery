@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Logger,
+  Optional,
   Param,
   Post,
   Query,
@@ -28,6 +29,7 @@ import { pubSub } from 'src/pubsub';
 import { CreateOrderRequestDto } from '../dto/create-order-request.dto';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { PaymentDto } from '../dto/payment.dto';
+import { OrderGateway } from '../gateways/order.gateway';
 import { CustomerOrdersService } from '../services/customer-orders.service';
 import { OrderActorPolicy } from '../services/order-rules.service';
 import { PublicOrdersService } from '../services/public-orders.service';
@@ -42,6 +44,7 @@ export class CustomerOrdersController {
     private readonly customerOrders: CustomerOrdersService,
     private readonly publicOrders: PublicOrdersService,
     private readonly paymentService: PaymentService,
+    @Optional() private readonly orderGateway?: OrderGateway,
   ) {}
 
   @Post()
@@ -142,6 +145,7 @@ export class CustomerOrdersController {
         await pubSub.publish('orderCreated', {
           orderCreated: updatedOrder,
         });
+        this.orderGateway?.notifyOrderCreated(updatedOrder);
         this.logger.log(`Order ${order.id} will be paid on delivery (COD)`);
         const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(
           /\/$/,

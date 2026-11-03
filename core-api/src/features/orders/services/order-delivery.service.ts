@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InProcessEventBus } from 'src/common/events/in-process-event-bus.service';
 import {
@@ -14,6 +20,7 @@ import { Order } from 'src/entities/order.entity';
 import { pubSub } from 'src/pubsub';
 import { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 import { In, Repository } from 'typeorm';
+import { OrderGateway } from '../gateways/order.gateway';
 import type { DeliveryCompletionOrder } from '../types/delivery-completion.types';
 import type { DeliveryDispatchCandidate } from '../types/delivery-dispatch.types';
 import type {
@@ -37,6 +44,7 @@ export class OrderDeliveryService {
     private readonly orderRepository: Repository<Order>,
     private readonly eventBus: InProcessEventBus,
     private readonly outboxService: OutboxService,
+    @Optional() private readonly orderGateway?: OrderGateway,
   ) {}
 
   async startDelivery(orderId: string): Promise<DeliveryOrderLifecycleState> {
@@ -82,6 +90,7 @@ export class OrderDeliveryService {
 
     if (result.changed) {
       await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
+      this.orderGateway?.notifyOrderStatusUpdated(result.order);
       if (result.eventId) {
         try {
           await this.outboxService.dispatchAfterCommit(result.eventId);
@@ -129,6 +138,7 @@ export class OrderDeliveryService {
 
     if (result.changed) {
       await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
+      this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
     return { accepted: true, orderStatus: OrderStatus.SHIPPER_RECEIVED };
   }
@@ -286,6 +296,7 @@ export class OrderDeliveryService {
 
     if (result.changed) {
       await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
+      this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
     return { orderId: result.order.id, status: result.order.status };
   }

@@ -21,6 +21,7 @@ import {
   ShipperDeliveryController,
 } from './controllers/shipper-delivery.controller';
 import { ShipperResolver } from './controllers/shipper.resolver';
+import { DeliveryGateway } from './gateways/delivery.gateway';
 import { DeliveryEventsHandler } from './handlers/delivery-events.handler';
 import { DELIVERY_ASSIGNMENT_QUEUE } from './queue/delivery-queue.constants';
 import { FindShipperProcessor } from './queue/find-shipper.processor';
@@ -83,6 +84,7 @@ const deliveryQueueModule = QueueModule.register({
     DeliveryReportService,
     AdminDeliveryService,
     ShipperResolver,
+    DeliveryGateway,
     RedisPendingAssignmentStore,
   ],
   exports: [CustomerDeliveryService, DeliveryDispatchService],

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InProcessEventBus } from 'src/common/events/in-process-event-bus.service';
 import {
@@ -14,6 +14,7 @@ import { Order } from 'src/entities/order.entity';
 import { pubSub } from 'src/pubsub';
 import { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 import { Repository } from 'typeorm';
+import { OrderGateway } from '../gateways/order.gateway';
 import {
   InvalidOrderStatusError,
   InvalidOrderTransitionError,
@@ -33,6 +34,7 @@ export class MerchantOrdersService {
     private readonly publicOrders: PublicOrdersService,
     private readonly eventBus: InProcessEventBus,
     private readonly outboxService: OutboxService,
+    @Optional() private readonly orderGateway?: OrderGateway,
   ) {}
 
   /**
@@ -122,6 +124,7 @@ export class MerchantOrdersService {
     const updatedOrder = await this.saveWithStatusEvent(order, previousStatus);
 
     await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: updatedOrder });
+    this.orderGateway?.notifyOrderStatusUpdated(updatedOrder);
     this.logger.log(`Order ${id} status updated to ${nextStatus}`);
 
     if (order.user?.id) {

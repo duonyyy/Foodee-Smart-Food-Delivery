@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -37,6 +38,7 @@ import {
   DELIVERY_DISPATCH_POLICY,
   DeliveryDispatchPolicy,
 } from '../contracts/delivery-dispatch.policy';
+import { DeliveryGateway } from '../gateways/delivery.gateway';
 import { DELIVERY_ASSIGNMENT_QUEUE } from '../queue/delivery-queue.constants';
 import { SHIPPER_PROFILE_STATUS } from '../types/shipper-profile.types';
 import { DeliveryTripService } from './delivery-trip.service';
@@ -79,6 +81,7 @@ export class DeliveryDispatchService {
     private readonly activeShipperTracker: ActiveShipperTrackerService,
     private readonly eventBus: InProcessEventBus,
     private readonly deliveryTripService: DeliveryTripService,
+    @Optional() private readonly deliveryGateway?: DeliveryGateway,
   ) {}
 
   // ==========================================
@@ -167,6 +170,7 @@ export class DeliveryDispatchService {
       await pubSub.publish('orderAssignedToShipper', {
         orderAssignedToShipper: { orderId: assignment.orderId, shipperId },
       });
+      this.deliveryGateway?.notifyOrderAssigned(assignment.orderId, shipperId);
       this.logger.log(`Order ${assignment.orderId} accepted by shipper ${shipperId}`);
     } else {
       this.logger.warn(`Order ${assignment.orderId} assignment is pending Outbox processing`);
@@ -389,7 +393,7 @@ export class DeliveryDispatchService {
       const shipperEarnings = order.shipperEarnings ?? Math.round(shippingFee * 0.8);
       const distance = order.deliveryDistance ?? 0;
 
-      await this.eventBus.publish<ShipperOfferRequestedEvent>(SHIPPER_OFFER_REQUESTED_EVENT, {
+      const offerEvent: ShipperOfferRequestedEvent = {
         orderId: order.orderId,
         targetShipperId: nearestShipper.shipperId,
         distanceKm: distance,
@@ -398,7 +402,13 @@ export class DeliveryDispatchService {
         shipperEarnings,
         shipperCommissionRate: order.shipperCommissionRate ?? 0.8,
         estimatedDeliveryTime: order.estimatedDeliveryTime ?? 30,
-      });
+      };
+
+      await this.eventBus.publish<ShipperOfferRequestedEvent>(
+        SHIPPER_OFFER_REQUESTED_EVENT,
+        offerEvent,
+      );
+      this.deliveryGateway?.notifyShipperOffer(nearestShipper.shipperId, offerEvent);
 
       assignment.isSentToShipper = true;
       assignment.targetShipperId = nearestShipper.shipperId;

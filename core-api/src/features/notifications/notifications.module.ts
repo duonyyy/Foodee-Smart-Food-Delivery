@@ -6,6 +6,7 @@ import { Notification } from 'src/entities/notification.entity';
 import { AuthModule } from 'src/features/auth/auth-module.public-api';
 import { NotificationController } from './controllers/notification.controller';
 import { NotificationResolver } from './controllers/notification.resolver';
+import { NotificationGateway } from './gateways/notification.gateway';
 import { NotificationEventHandler } from './handlers/notification-event.handler';
 import { NotificationDeadLetterService } from './services/notification-dead-letter.service';
 import { NotificationService } from './services/notification.service';
@@ -21,7 +22,9 @@ import { NotificationService } from './services/notification.service';
     NotificationService,
     NotificationDeadLetterService,
     NotificationResolver,
+    NotificationGateway,
     NotificationEventHandler,
   ],
+  exports: [NotificationService, NotificationGateway],
 })
 export class NotificationsModule {}

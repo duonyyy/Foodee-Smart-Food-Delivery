@@ -18,7 +18,7 @@ export class ChatService {
 
   async generateReply(
     userMessage: string,
-    userId: string,
+    userId?: string,
     metadata?: Partial<ChatMetadata> | null,
   ): Promise<ChatReply> {
     try {
@@ -33,24 +33,45 @@ export class ChatService {
         };
       }
 
-      if (this.quickReorderFlowService.isStartRequest(normalizedMessage)) {
-        return this.quickReorderFlowService.start(userId, chatMetadata);
-      }
+      if (
+        this.quickReorderFlowService.isStartRequest(normalizedMessage) ||
+        chatMetadata.isQuickReorder
+      ) {
+        if (!userId) {
+          return {
+            reply:
+              'Để xem lại các đơn hàng cũ và đặt lại nhanh, bạn vui lòng đăng nhập tài khoản nhé! 🔐',
+            action: 'requireAuth',
+            metadata: createInitialChatMetadata(),
+          };
+        }
 
-      if (chatMetadata.isQuickReorder) {
+        if (this.quickReorderFlowService.isStartRequest(normalizedMessage)) {
+          return this.quickReorderFlowService.start(userId, chatMetadata);
+        }
         return this.quickReorderFlowService.continue(normalizedMessage, userId, chatMetadata);
       }
 
-      if (
+      const isStartOrder =
         this.orderConversationFlowService.isStartRequest(normalizedMessage) &&
-        !chatMetadata.isOrdering
-      ) {
-        return this.orderConversationFlowService.start(chatMetadata);
-      }
+        !chatMetadata.isOrdering;
+      const isOrdering = this.isOrderInProgress(chatMetadata);
 
-      const context = await this.chatContextService.getContext(userId);
+      if (isStartOrder || isOrdering) {
+        if (!userId) {
+          return {
+            reply:
+              'Để mình có thể ghi nhận địa chỉ và gửi đơn hàng đến nhà hàng cho bạn, bạn vui lòng đăng nhập tài khoản nhé! 🛵',
+            action: 'requireAuth',
+            metadata: createInitialChatMetadata(),
+          };
+        }
 
-      if (this.isOrderInProgress(chatMetadata)) {
+        if (isStartOrder) {
+          return this.orderConversationFlowService.start(chatMetadata);
+        }
+
+        const context = await this.chatContextService.getContext(userId);
         return this.orderConversationFlowService.continue(
           normalizedMessage,
           userId,
@@ -59,6 +80,7 @@ export class ChatService {
         );
       }
 
+      const context = await this.chatContextService.getContext(userId);
       return this.generalChatFlowService.reply(normalizedMessage, context);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

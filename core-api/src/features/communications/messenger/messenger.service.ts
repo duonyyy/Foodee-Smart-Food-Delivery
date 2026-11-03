@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InProcessEventBus } from 'src/common/events/in-process-event-bus.service';
@@ -20,6 +21,7 @@ import { pubSub } from 'src/pubsub';
 import { Repository } from 'typeorm';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { ChatGateway } from './gateways/chat.gateway';
 
 @Injectable()
 export class MessengerService {
@@ -33,6 +35,7 @@ export class MessengerService {
     private readonly customerRestaurants: CustomerRestaurantsService,
     private readonly orderMessaging: OrderMessagingService,
     private readonly eventBus: InProcessEventBus,
+    @Optional() private readonly chatGateway?: ChatGateway,
   ) {}
 
   /**
@@ -331,6 +334,8 @@ export class MessengerService {
       conversationId: savedMessage.conversation.id,
     });
 
+    this.chatGateway?.notifyMessageSent(savedMessage.conversation.id, savedMessage);
+
     // Find the receiver (the other participant)
     const receiverId =
       conversation.participant1.id === userId
@@ -467,6 +472,7 @@ export class MessengerService {
       messagesRead: true,
       conversationId: conversationId,
     });
+    this.chatGateway?.notifyMessagesRead(conversationId, userId);
   }
 
   /**

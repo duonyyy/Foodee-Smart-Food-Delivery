@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
   DELIVERY_COMPLETED_EVENT,
@@ -19,6 +19,7 @@ import {
   type PaymentSucceededEvent,
 } from 'src/common/events/payment-succeeded.event';
 import { pubSub } from 'src/pubsub';
+import { NotificationGateway } from '../gateways/notification.gateway';
 import { NotificationDeadLetterService } from '../services/notification-dead-letter.service';
 import { NotificationService } from '../services/notification.service';
 
@@ -43,6 +44,7 @@ export class NotificationEventHandler implements OnModuleInit, OnModuleDestroy {
     private readonly eventBus: InProcessEventBus,
     private readonly notificationService: NotificationService,
     private readonly deadLetterService: NotificationDeadLetterService,
+    @Optional() private readonly notificationGateway?: NotificationGateway,
   ) {}
 
   onModuleInit(): void {
@@ -160,6 +162,14 @@ export class NotificationEventHandler implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error(
         `notification_realtime_publish_failed key=${event.idempotencyKey}: ${this.errorMessage(error)}`,
+      );
+    }
+
+    try {
+      this.notificationGateway?.sendNotification(event.recipientUserId, persisted.notification);
+    } catch (error) {
+      this.logger.error(
+        `notification_socketio_publish_failed key=${event.idempotencyKey}: ${this.errorMessage(error)}`,
       );
     }
   }
