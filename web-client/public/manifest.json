@@ -1,0 +1,52 @@
+{
+  "id": "com.foodee.app",
+  "name": "Foodee - Giao Đồ Ăn Trực Tuyến",
+  "short_name": "Foodee",
+  "description": "Ứng dụng đặt món ăn và giao hàng siêu tốc, hỗ trợ theo dõi realtime cho khách hàng, chủ quán và tài xế",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#ea580c",
+  "lang": "vi",
+  "dir": "ltr",
+  "categories": ["food", "shopping", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Khám phá món ngon",
+      "short_name": "Khám phá",
+      "description": "Tìm kiếm các quán ăn và món ngon gần bạn",
+      "url": "/",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Đơn hàng của tôi",
+      "short_name": "Đơn hàng",
+      "description": "Theo dõi trạng thái đơn hàng hiện tại",
+      "url": "/order",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}
+
