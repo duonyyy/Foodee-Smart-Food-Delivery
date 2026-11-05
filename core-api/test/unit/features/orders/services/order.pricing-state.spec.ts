@@ -83,6 +83,7 @@ describe('Order pricing and state characterization', () => {
         markPaid: jest.fn(),
       },
       menuReader: {
+        reserveItemsInTransaction: jest.fn().mockResolvedValue(undefined),
         getOrderableItems: jest.fn().mockImplementation(async ({ items }) => {
           return Promise.all(
             items.map(async (i: { foodId: string; toppingIds: string[] }) => {
