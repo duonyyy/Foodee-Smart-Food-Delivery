@@ -140,6 +140,7 @@ export class FoodMerchantService {
   ): Promise<void> {
     await Promise.all([
       this.cache.deleteByPattern('food:*'),
+      this.cache.deleteByPattern('restaurant:foods:*'),
       restaurantId
         ? this.cache.deleteByPattern(`restaurant:${restaurantId}:*`)
         : Promise.resolve(0),

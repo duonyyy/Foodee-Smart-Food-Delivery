@@ -1,3 +1,46 @@
+const BASE32_GEOHASH = '0123456789bcdefghjkmnpqrstuvwxyz';
+
+export function encodeGeohash(lat: number, lng: number, precision = 6): string {
+  let minLat = -90.0;
+  let maxLat = 90.0;
+  let minLng = -180.0;
+  let maxLng = 180.0;
+  let hash = '';
+  let isEven = true;
+  let bit = 0;
+  let ch = 0;
+
+  while (hash.length < precision) {
+    if (isEven) {
+      const mid = (minLng + maxLng) / 2;
+      if (lng >= mid) {
+        ch |= 1 << (4 - bit);
+        minLng = mid;
+      } else {
+        maxLng = mid;
+      }
+    } else {
+      const mid = (minLat + maxLat) / 2;
+      if (lat >= mid) {
+        ch |= 1 << (4 - bit);
+        minLat = mid;
+      } else {
+        maxLat = mid;
+      }
+    }
+
+    isEven = !isEven;
+    if (bit < 4) {
+      bit++;
+    } else {
+      hash += BASE32_GEOHASH[ch];
+      bit = 0;
+      ch = 0;
+    }
+  }
+  return hash;
+}
+
 export function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const toRad = (x: number) => (x * Math.PI) / 180;
   const R = 6371; // Earth radius in km

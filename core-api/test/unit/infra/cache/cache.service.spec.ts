@@ -37,4 +37,25 @@ describe('AppCacheService', () => {
     expect(redis.del).toHaveBeenCalledWith('restaurant:1', 'restaurant:2');
     expect(redis.del).toHaveBeenCalledWith('restaurant:3');
   });
+
+  it('serves repeated reads from L1 in-memory cache without hitting Redis again and invalidates L1 on pattern delete', async () => {
+    await service.set('restaurant:1:detail', { id: 'restaurant-1', name: 'Quán A' }, 60);
+    expect(redis.set).toHaveBeenCalledTimes(1);
+
+    const first = await service.get('restaurant:1:detail');
+    const second = await service.get('restaurant:1:detail');
+    expect(first).toEqual({ id: 'restaurant-1', name: 'Quán A' });
+    expect(second).toEqual({ id: 'restaurant-1', name: 'Quán A' });
+    // L1 cache hit avoids calling redis.get
+    expect(redis.get).not.toHaveBeenCalled();
+
+    redis.scan.mockResolvedValueOnce(['0', ['restaurant:1:detail']]);
+    redis.unlink.mockResolvedValue(1);
+    await service.deleteByPattern('restaurant:1:*');
+
+    redis.get.mockResolvedValueOnce(null);
+    const afterDelete = await service.get('restaurant:1:detail');
+    expect(afterDelete).toBeNull();
+    expect(redis.get).toHaveBeenCalledTimes(1);
+  });
 });

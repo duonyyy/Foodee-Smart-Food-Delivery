@@ -1,7 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AppCacheService } from 'src/infra/cache/public-api';
 import { Repository } from 'typeorm';
 import { SystemConstraint } from '../../../entities/systemConstaints.entity';
+
+const SYSTEM_CONSTRAINTS_CACHE_KEY = 'system:constraints:active';
+const SYSTEM_CONSTRAINTS_TTL_SECONDS = 300;
 
 @Injectable()
 export class SystemConstraintsService {
@@ -13,6 +17,7 @@ export class SystemConstraintsService {
   constructor(
     @InjectRepository(SystemConstraint)
     private systemConstraintsRepository: Repository<SystemConstraint>,
+    @Optional() private readonly cacheService?: AppCacheService,
   ) {}
 
   /**
@@ -21,12 +26,24 @@ export class SystemConstraintsService {
   async getConstraints(): Promise<SystemConstraint> {
     const now = new Date();
 
-    // Check if cached constraints are still valid
+    // Check if L1 cached constraints are still valid
     if (
       this.cachedConstraints &&
       now.getTime() - this.lastCacheUpdate.getTime() < this.CACHE_DURATION
     ) {
       return this.cachedConstraints;
+    }
+
+    // Check L2 Redis cache if available
+    if (this.cacheService) {
+      const redisCached = await this.cacheService.get<SystemConstraint>(
+        SYSTEM_CONSTRAINTS_CACHE_KEY,
+      );
+      if (redisCached) {
+        this.cachedConstraints = Object.assign(new SystemConstraint(), redisCached);
+        this.lastCacheUpdate = now;
+        return this.cachedConstraints;
+      }
     }
 
     try {
@@ -43,9 +60,16 @@ export class SystemConstraintsService {
         constraints = await this.createDefaultConstraints();
       }
 
-      // Update cache
+      // Update L1 & L2 cache
       this.cachedConstraints = constraints;
       this.lastCacheUpdate = now;
+      if (this.cacheService) {
+        await this.cacheService.set(
+          SYSTEM_CONSTRAINTS_CACHE_KEY,
+          constraints,
+          SYSTEM_CONSTRAINTS_TTL_SECONDS,
+        );
+      }
 
       this.logger.log(
         `✅ System constraints loaded: max_delivery_distance=${constraints.max_delivery_distance}km, min_completion_rate=${constraints.min_completion_rate}`,
@@ -268,6 +292,9 @@ export class SystemConstraintsService {
   clearCache(): void {
     this.cachedConstraints = null;
     this.lastCacheUpdate = new Date(0);
+    if (this.cacheService) {
+      void this.cacheService.delete(SYSTEM_CONSTRAINTS_CACHE_KEY);
+    }
     this.logger.log('🗑️ System constraints cache cleared');
   }
 }

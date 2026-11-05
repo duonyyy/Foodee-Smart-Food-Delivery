@@ -346,6 +346,7 @@ export class MerchantRestaurantsService {
   private async clearRestaurantCache(restaurantId?: string, ownerId?: string): Promise<void> {
     await Promise.all([
       this.cache.deleteByPattern('restaurant:*'),
+      this.cache.deleteByPattern('food:*'),
       restaurantId
         ? this.cache.deleteByPattern(`restaurant:${restaurantId}:*`)
         : Promise.resolve(0),

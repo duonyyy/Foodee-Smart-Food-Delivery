@@ -36,4 +36,29 @@ describe('PublicRestaurantsService discovery', () => {
       address: null,
     });
   });
+
+  it('normalizes nearby coordinates into a precision-6 geohash cache key and computes exact distance per caller', async () => {
+    repository.findAndCount.mockResolvedValue([
+      [
+        {
+          id: 'restaurant-1',
+          name: 'Quán A',
+          rating: '4.5',
+          latitude: 10.7769,
+          longitude: 106.7009,
+          status: RestaurantStatus.APPROVED,
+        },
+      ],
+      1,
+    ]);
+
+    const first = await service.findAll(1, 10, 10.7769, 106.7009);
+    const second = await service.findAll(1, 10, 10.77695, 106.70092);
+
+    // Both calls share the same geohash cell cache key
+    expect(cache.remember.mock.calls[0]?.[0]).toBe(cache.remember.mock.calls[1]?.[0]);
+    expect(cache.remember.mock.calls[0]?.[0]).toContain('"geohash"');
+    expect(first.items[0]?.distance).toBe(0);
+    expect(second.items[0]?.distance).toBeDefined();
+  });
 });

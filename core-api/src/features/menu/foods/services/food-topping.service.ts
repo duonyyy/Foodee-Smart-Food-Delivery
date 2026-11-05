@@ -110,6 +110,8 @@ export class FoodToppingService {
     await Promise.all([
       this.cache.deleteByPattern(`food:${foodId}:*`),
       this.cache.deleteByPattern(`food:restaurant:${restaurantId}:*`),
+      this.cache.deleteByPattern(`restaurant:${restaurantId}:*`),
+      this.cache.deleteByPattern('restaurant:foods:*'),
       this.cache.deleteByPattern('food:*'),
     ]);
   }

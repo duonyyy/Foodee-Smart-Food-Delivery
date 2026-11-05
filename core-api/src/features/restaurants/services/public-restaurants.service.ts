@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { estimateDeliveryTime, haversineDistance } from 'src/common/utils/geo.util';
+import { encodeGeohash, estimateDeliveryTime, haversineDistance } from 'src/common/utils/geo.util';
 import { Restaurant, RestaurantStatus } from 'src/entities/restaurant.entity';
 import { AppCacheService } from 'src/infra/cache/public-api';
 import { Repository } from 'typeorm';
@@ -27,7 +27,15 @@ export class PublicRestaurantsService {
     lat?: number,
     lng?: number,
   ): Promise<RestaurantPageResponseDto> {
-    const cacheKey = this.cacheKey('restaurant:approved', { page, pageSize, lat, lng });
+    const geohash =
+      lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)
+        ? encodeGeohash(lat, lng, 6)
+        : undefined;
+    const cacheKey = this.cacheKey('restaurant:approved', {
+      page,
+      pageSize,
+      ...(geohash ? { geohash } : {}),
+    });
     const result = await this.cache.remember(cacheKey, RESTAURANT_CACHE_TTL_SECONDS, async () => {
       const [items, totalItems] = await this.restaurantRepository.findAndCount({
         where: { status: RestaurantStatus.APPROVED },
@@ -44,7 +52,9 @@ export class PublicRestaurantsService {
     });
     return {
       ...result,
-      items: result.items.map((item) => RestaurantResponseDto.fromRestaurant(item)),
+      items: result.items.map((item) =>
+        RestaurantResponseDto.fromRestaurant(this.withDistance(item as Restaurant, lat, lng)),
+      ),
     };
   }
 
@@ -57,10 +67,18 @@ export class PublicRestaurantsService {
   }
 
   async findOne(id: string, lat?: number, lng?: number): Promise<RestaurantResponseDto> {
-    const restaurant = await this.restaurantRepository.findOne({
-      where: { id, status: RestaurantStatus.APPROVED },
-      relations: ['owner'],
-    });
+    const cacheKey = `restaurant:${id}:detail`;
+    const restaurant = this.cache?.remember
+      ? await this.cache.remember(cacheKey, RESTAURANT_CACHE_TTL_SECONDS, () =>
+          this.restaurantRepository.findOne({
+            where: { id, status: RestaurantStatus.APPROVED },
+            relations: ['owner'],
+          }),
+        )
+      : await this.restaurantRepository.findOne({
+          where: { id, status: RestaurantStatus.APPROVED },
+          relations: ['owner'],
+        });
     if (!restaurant) {
       throw new NotFoundException('Approved restaurant not found');
     }
