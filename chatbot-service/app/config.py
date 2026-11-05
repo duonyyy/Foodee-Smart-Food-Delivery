@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # LLM Provider: "local" or "gemini"
     llm_provider: str = "local"
 
+    # Cache configuration (L1 in-memory + optional L2 Redis)
+    redis_url: str = ""
+    chat_cache_ttl_seconds: int = 300
+    chat_cache_max_entries: int = 512
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

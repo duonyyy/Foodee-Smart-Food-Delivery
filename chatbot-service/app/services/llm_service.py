@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import AsyncIterator
+import json
 import time
 
 import httpx
@@ -32,6 +34,122 @@ class LlmService:
         if self._settings.llm_provider == "gemini":
             return await self.call_gemini(prompt)
         return await self.call_local_llm(prompt)
+
+    async def stream_llm(self, prompt: str) -> AsyncIterator[str]:
+        """Stream text chunks from the configured LLM provider with fallback to chunked full output."""
+        if self._settings.llm_provider == "gemini":
+            async for chunk in self.stream_gemini(prompt):
+                yield chunk
+            return
+        async for chunk in self.stream_local_llm(prompt):
+            yield chunk
+
+    async def stream_gemini(self, prompt: str) -> AsyncIterator[str]:
+        """Stream from Google Gemini API (:streamGenerateContent?alt=sse) or fallback to call_gemini."""
+        api_key = self._settings.gemini_api_key
+        if not api_key:
+            raise LlmProviderError("provider_not_configured", 503)
+
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self._settings.gemini_model}:streamGenerateContent?alt=sse"
+        )
+        headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
+        payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+
+        yielded = False
+        try:
+            async with httpx.AsyncClient() as client:
+                async with client.stream(
+                    "POST", url, json=payload, headers=headers, timeout=self._timeout_seconds
+                ) as response:
+                    if response.status_code == 200:
+                        async for line in response.aiter_lines():
+                            line = line.strip()
+                            if not line.startswith("data:"):
+                                continue
+                            data_str = line[5:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                continue
+                            chunk_data = json.loads(data_str)
+                            parts = (
+                                chunk_data.get("candidates", [{}])[0]
+                                .get("content", {})
+                                .get("parts", [])
+                            )
+                            for part in parts:
+                                text = part.get("text", "")
+                                if text:
+                                    yielded = True
+                                    yield text
+        except Exception:
+            if yielded:
+                return
+
+        if not yielded:
+            full_text = await self.call_gemini(prompt)
+            for token in self._chunk_text(full_text):
+                yield token
+
+    async def stream_local_llm(self, prompt: str) -> AsyncIterator[str]:
+        """Stream from OpenAI-compatible local LLM endpoint or fallback to call_local_llm."""
+        base_url = self._settings.chat_llm_base_url.rstrip("/")
+        url = f"{base_url}/chat/completions"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "model": self._settings.chat_llm_model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Bạn là MiXiBot - trợ lý đặt món ăn vui vẻ, "
+                        "thân thiện, nói tiếng Việt tự nhiên và ngắn gọn."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": self._settings.chat_llm_temperature,
+            "max_tokens": 1024,
+            "stream": True,
+        }
+
+        yielded = False
+        try:
+            async with httpx.AsyncClient() as client:
+                async with client.stream(
+                    "POST", url, json=payload, headers=headers, timeout=self._timeout_seconds
+                ) as response:
+                    if response.status_code == 200:
+                        async for line in response.aiter_lines():
+                            line = line.strip()
+                            if not line.startswith("data:"):
+                                continue
+                            data_str = line[5:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                break
+                            chunk_data = json.loads(data_str)
+                            delta = (
+                                chunk_data.get("choices", [{}])[0]
+                                .get("delta", {})
+                                .get("content", "")
+                            )
+                            if delta:
+                                yielded = True
+                                yield delta
+        except Exception:
+            if yielded:
+                return
+
+        if not yielded:
+            full_text = await self.call_local_llm(prompt)
+            for token in self._chunk_text(full_text):
+                yield token
+
+    @staticmethod
+    def _chunk_text(text: str, chunk_size: int = 24) -> list[str]:
+        if not text:
+            return []
+        return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
 
     async def call_gemini(self, prompt: str) -> str:
         """Call Google Gemini API."""

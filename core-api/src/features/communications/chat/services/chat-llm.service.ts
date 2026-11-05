@@ -1,7 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { createHash } from 'node:crypto';
+import { AppCacheService } from 'src/infra/cache/public-api';
 import { ChatMenuItem, ChatOrderItem, ChatReply } from '../types/chat.types';
+
+const CHAT_LLM_CACHE_TTL_SECONDS = 300;
 
 interface ParseOrderItemsResponse {
   orderItems?: unknown;
@@ -33,13 +37,32 @@ export class ChatLlmService {
   private readonly logger = new Logger(ChatLlmService.name);
   private readonly aiServiceToken: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Optional() private readonly cacheService?: AppCacheService,
+  ) {
     const token = this.configService.get<string>('AI_SERVICE_TOKEN');
     if (!token) throw new Error('AI_SERVICE_TOKEN is required');
     this.aiServiceToken = token;
   }
 
+  private buildChatCacheKey(namespace: string, userMessage: string, menuFlat: ChatMenuItem[]): string {
+    const menuDigest = menuFlat.map((item) => `${item.id}:${item.price}`).join('|');
+    const hash = createHash('sha256')
+      .update(`${userMessage.trim().toLowerCase()}::${menuDigest}`)
+      .digest('hex');
+    return `food:chat:${namespace}:${hash}`;
+  }
+
   async getGeneralReply(userMessage: string, menuFlat: ChatMenuItem[]): Promise<ChatReply> {
+    const cacheKey = this.buildChatCacheKey('general', userMessage, menuFlat);
+    if (this.cacheService) {
+      const cached = await this.cacheService.get<ChatReply>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     try {
       const response = await axios.post<ChatReply>(
         `${this.getAiServerUrl()}/api/chat/general-reply`,
@@ -53,7 +76,11 @@ export class ChatLlmService {
         },
       );
 
-      return this.sanitizeGeneralReply(response.data, menuFlat);
+      const sanitized = this.sanitizeGeneralReply(response.data, menuFlat);
+      if (this.cacheService) {
+        await this.cacheService.set(cacheKey, sanitized, CHAT_LLM_CACHE_TTL_SECONDS);
+      }
+      return sanitized;
     } catch (error: unknown) {
       const details = errorDetails(error);
       this.logger.error(`[AI Server Error] ${details.message}`);

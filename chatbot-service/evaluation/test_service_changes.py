@@ -56,6 +56,7 @@ def test_provider_failure_returns_machine_readable_error(monkeypatch):
     async def unavailable(_prompt: str) -> str:
         raise LlmProviderError("upstream_http_error", 502, 429)
 
+    chat._cache.clear()
     monkeypatch.setattr(chat._llm_service, "call_llm", unavailable)
     monkeypatch.setattr(auth, "get_settings", lambda: SimpleNamespace(ai_service_token="test-token"))
 
@@ -99,6 +100,7 @@ def test_malformed_llm_json_returns_502_not_empty_order(monkeypatch):
     async def malformed(_prompt: str) -> str:
         return "not JSON"
 
+    chat._cache.clear()
     monkeypatch.setattr(auth, "get_settings", lambda: SimpleNamespace(ai_service_token="test-token"))
     monkeypatch.setattr(chat._llm_service, "call_llm", malformed)
 
@@ -113,6 +115,65 @@ def test_malformed_llm_json_returns_502_not_empty_order(monkeypatch):
     response = asyncio.run(request())
     assert response.status_code == 502
     assert response.json()["detail"] == {"code": "invalid_llm_output"}
+
+
+def test_general_reply_cache_avoids_duplicate_llm_calls(monkeypatch):
+    calls = 0
+
+    async def mock_llm(_prompt: str) -> str:
+        nonlocal calls
+        calls += 1
+        return '{"reply":"Phở bò giá 45.000đ nhé bạn!","suggestions":[],"action":null}'
+
+    chat._cache.clear()
+    monkeypatch.setattr(auth, "get_settings", lambda: SimpleNamespace(ai_service_token="test-token"))
+    monkeypatch.setattr(chat._llm_service, "call_llm", mock_llm)
+
+    async def request():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            r1 = await client.post(
+                "/api/chat/general-reply",
+                json={"userMessage": "Phở bò giá bao nhiêu?", "menuFlat": load_dataset()["menu"]},
+                headers={"X-AI-Service-Token": "test-token"},
+            )
+            r2 = await client.post(
+                "/api/chat/general-reply",
+                json={"userMessage": "Phở bò giá bao nhiêu?", "menuFlat": load_dataset()["menu"]},
+                headers={"X-AI-Service-Token": "test-token"},
+            )
+            return r1, r2
+
+    res1, res2 = asyncio.run(request())
+    assert res1.status_code == 200
+    assert res2.status_code == 200
+    assert res1.json()["reply"] == res2.json()["reply"]
+    # LLM called only once; second request served from cache
+    assert calls == 1
+
+
+def test_general_reply_sse_stream_endpoint(monkeypatch):
+    async def mock_stream(_prompt: str):
+        yield '{"reply":"Chào bạn, '
+        yield 'mình là MiXiBot!","suggestions":[],"action":null}'
+
+    chat._cache.clear()
+    monkeypatch.setattr(auth, "get_settings", lambda: SimpleNamespace(ai_service_token="test-token"))
+    monkeypatch.setattr(chat._llm_service, "stream_llm", mock_stream)
+
+    async def request():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            return await client.post(
+                "/api/chat/general-reply/stream",
+                json={"userMessage": "Xin chào", "menuFlat": load_dataset()["menu"]},
+                headers={"X-AI-Service-Token": "test-token"},
+            )
+
+    res = asyncio.run(request())
+    assert res.status_code == 200
+    assert "text/event-stream" in res.headers.get("content-type", "")
+    assert '"event": "delta"' in res.text
+    assert '"event": "done"' in res.text
+    assert "MiXiBot" in res.text
 
 
 def test_readiness_fails_closed_without_internal_token(monkeypatch):
