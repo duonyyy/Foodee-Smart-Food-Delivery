@@ -13,6 +13,8 @@ import {
   Eye,
   Printer,
   PackageCheck,
+  Clock,
+  ArrowRight,
 } from "lucide-react";
 
 interface KitchenKanbanProps {
@@ -30,10 +32,15 @@ export function KitchenKanban({
   onViewOrder,
   getElapsedTimeText,
 }: KitchenKanbanProps) {
-  // Categorize orders into columns
+  // Categorize orders into the 4 canonical KDS columns
   const pendingOrders = orders.filter((o) => o.status === "pending");
   const confirmedOrders = orders.filter((o) => o.status === "confirmed");
-  const deliveringOrders = orders.filter((o) => o.status === "delivering");
+  const waitingDriverOrders = orders.filter(
+    (o) =>
+      o.status === "delivering" ||
+      o.status === "shipper_received" ||
+      o.status === "ready"
+  );
   const finishedOrders = orders.filter(
     (o) => o.status === "completed" || o.status === "canceled"
   );
@@ -102,7 +109,10 @@ export function KitchenKanban({
     printWindow.document.close();
   };
 
-  const renderKanbanCard = (order: Order, columnType: "pending" | "confirmed" | "delivering" | "finished") => {
+  const renderKanbanCard = (
+    order: Order,
+    columnType: "pending" | "confirmed" | "waiting_driver" | "finished"
+  ) => {
     const isUpdating = updatingOrders.has(order.id);
     const elapsedTime = getElapsedTimeText(order.createdAt);
     const diffMinutes = Math.floor(
@@ -121,26 +131,29 @@ export function KitchenKanban({
             ? "border-amber-400/80 bg-amber-50/15 shadow-xs ring-1 ring-amber-400/30"
             : columnType === "confirmed"
             ? "border-sky-300/80 bg-sky-50/10"
+            : columnType === "waiting_driver"
+            ? "border-purple-300/80 bg-purple-50/10"
             : "border-border/80 hover:border-primary/40"
         }`}
       >
         <div>
-          {/* Card Top */}
+          {/* Card Top Header */}
           <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-border/50">
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-sm text-foreground">
                 #{order.id.slice(-6).toUpperCase()}
               </span>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
                   isOverdue
                     ? "bg-rose-500 text-white animate-pulse"
                     : columnType === "pending"
                     ? "bg-amber-100 text-amber-800"
-                    : "bg-slate-100 text-slate-600"
+                    : "bg-slate-100 text-slate-600 dark:bg-muted dark:text-muted-foreground"
                 }`}
               >
-                {isOverdue ? `⚠️ ${elapsedTime}` : elapsedTime}
+                <Clock className="h-2.5 w-2.5" />
+                <span>{isOverdue ? `⚠️ ${elapsedTime}` : elapsedTime}</span>
               </span>
             </div>
             <StatusBadge status={order.status || "pending"} size="sm" />
@@ -162,7 +175,7 @@ export function KitchenKanban({
 
             {/* Note box */}
             {order.note && (
-              <div className="rounded-lg border border-amber-200/80 bg-amber-50 p-2 text-[11px] text-amber-900 leading-tight">
+              <div className="rounded-lg border border-amber-200/80 bg-amber-50 dark:bg-amber-950/20 p-2 text-[11px] text-amber-900 dark:text-amber-300 leading-tight">
                 <span className="font-bold">Ghi chú:</span> {order.note}
               </div>
             )}
@@ -171,7 +184,7 @@ export function KitchenKanban({
             {order.orderDetails && order.orderDetails.length > 0 && (
               <div className="pt-1 border-t border-border/40 space-y-1">
                 {order.orderDetails.slice(0, 3).map((item: OrderDetail, idx: number) => (
-                  <div key={idx} className="flex items-center justify-between text-[11px] text-slate-600">
+                  <div key={idx} className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
                     <span className="truncate max-w-[170px]">
                       • {item.food?.name || "Món ăn"}
                     </span>
@@ -188,7 +201,7 @@ export function KitchenKanban({
           </div>
         </div>
 
-        {/* Card Footer / Actions */}
+        {/* Card Footer / 1-Touch Actions */}
         <div className="pt-2.5 mt-1 border-t border-border/50 flex items-center justify-between gap-2">
           <div>
             <span className="text-[10px] text-muted-foreground block">Tổng tiền</span>
@@ -208,6 +221,7 @@ export function KitchenKanban({
               <Printer className="h-3.5 w-3.5" />
             </Button>
 
+            {/* Column 1: Đơn mới -> Nhận đơn (confirmed) */}
             {columnType === "pending" && (
               <>
                 <Button
@@ -232,6 +246,7 @@ export function KitchenKanban({
               </>
             )}
 
+            {/* Column 2: Đang làm -> Xong món, chuyển sang Chờ tài xế (delivering) */}
             {columnType === "confirmed" && (
               <Button
                 size="sm"
@@ -241,10 +256,12 @@ export function KitchenKanban({
               >
                 <ChefHat className="h-3.5 w-3.5 mr-1" />
                 <span>{isUpdating ? "..." : "Xong món"}</span>
+                <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             )}
 
-            {columnType === "delivering" && (
+            {/* Column 3: Chờ tài xế -> Đã lấy (completed) */}
+            {columnType === "waiting_driver" && (
               <Button
                 size="sm"
                 disabled={isUpdating}
@@ -252,10 +269,11 @@ export function KitchenKanban({
                 className="h-8 px-2.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
               >
                 <PackageCheck className="h-3.5 w-3.5 mr-1" />
-                <span>{isUpdating ? "..." : "Hoàn tất"}</span>
+                <span>{isUpdating ? "..." : "Đã giao tài xế"}</span>
               </Button>
             )}
 
+            {/* Column 4: Đã lấy -> Xem chi tiết */}
             {columnType === "finished" && (
               <Button
                 variant="ghost"
@@ -264,7 +282,7 @@ export function KitchenKanban({
                 className="h-8 px-2 rounded-lg text-xs font-medium text-slate-500"
               >
                 <Eye className="h-3.5 w-3.5 mr-1" />
-                <span>Xem</span>
+                <span>Chi tiết</span>
               </Button>
             )}
           </div>
@@ -275,7 +293,7 @@ export function KitchenKanban({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
-      {/* 1. Column: Pending */}
+      {/* 1. Column: Đơn mới */}
       <div className="rounded-2xl border border-amber-200/80 bg-amber-50/20 p-3.5 flex flex-col gap-3 min-h-[450px]">
         <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
           <div className="flex items-center gap-2">
@@ -283,8 +301,8 @@ export function KitchenKanban({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
             </span>
-            <h3 className="font-bold text-xs uppercase tracking-wider text-amber-900">
-              Chờ xác nhận
+            <h3 className="font-bold text-xs uppercase tracking-wider text-amber-900 dark:text-amber-300">
+              Đơn mới
             </h3>
           </div>
           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
@@ -303,13 +321,13 @@ export function KitchenKanban({
         )}
       </div>
 
-      {/* 2. Column: Confirmed / Cooking */}
+      {/* 2. Column: Đang làm */}
       <div className="rounded-2xl border border-sky-200/80 bg-sky-50/20 p-3.5 flex flex-col gap-3 min-h-[450px]">
         <div className="flex items-center justify-between pb-2 border-b border-sky-200/60">
           <div className="flex items-center gap-2">
             <ChefHat className="h-4 w-4 text-sky-600" />
-            <h3 className="font-bold text-xs uppercase tracking-wider text-sky-900">
-              Đang làm món (Bếp)
+            <h3 className="font-bold text-xs uppercase tracking-wider text-sky-900 dark:text-sky-300">
+              Đang làm
             </h3>
           </div>
           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
@@ -328,56 +346,59 @@ export function KitchenKanban({
         )}
       </div>
 
-      {/* 3. Column: Delivering / Ready for pickup */}
+      {/* 3. Column: Chờ tài xế */}
       <div className="rounded-2xl border border-purple-200/80 bg-purple-50/20 p-3.5 flex flex-col gap-3 min-h-[450px]">
         <div className="flex items-center justify-between pb-2 border-b border-purple-200/60">
           <div className="flex items-center gap-2">
             <Bike className="h-4 w-4 text-purple-600" />
-            <h3 className="font-bold text-xs uppercase tracking-wider text-purple-900">
-              Đang giao hàng
+            <h3 className="font-bold text-xs uppercase tracking-wider text-purple-900 dark:text-purple-300">
+              Chờ tài xế
             </h3>
           </div>
           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-            {deliveringOrders.length}
+            {waitingDriverOrders.length}
           </span>
         </div>
 
-        {deliveringOrders.length === 0 ? (
+        {waitingDriverOrders.length === 0 ? (
           <div className="py-16 text-center text-xs text-muted-foreground">
-            Không có đơn đang giao
+            Không có đơn chờ tài xế
           </div>
         ) : (
           <div className="space-y-3 overflow-y-auto max-h-[70vh] pr-0.5">
-            {deliveringOrders.map((order) => renderKanbanCard(order, "delivering"))}
+            {waitingDriverOrders.map((order) =>
+              renderKanbanCard(order, "waiting_driver")
+            )}
           </div>
         )}
       </div>
 
-      {/* 4. Column: Finished (Completed / Canceled) */}
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-3.5 flex flex-col gap-3 min-h-[450px]">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+      {/* 4. Column: Đã lấy */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/50 dark:bg-muted/30 p-3.5 flex flex-col gap-3 min-h-[450px]">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-border">
           <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-slate-500" />
-            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">
-              Đã xong / Đã hủy
+            <CheckCircle className="h-4 w-4 text-emerald-600" />
+            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Đã lấy
             </h3>
           </div>
-          <span className="text-xs font-black px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+          <span className="text-xs font-black px-2 py-0.5 rounded-full bg-slate-200 dark:bg-muted text-slate-700 dark:text-slate-200">
             {finishedOrders.length}
           </span>
         </div>
 
         {finishedOrders.length === 0 ? (
           <div className="py-16 text-center text-xs text-muted-foreground">
-            Chưa có lịch sử đơn
+            Chưa có đơn đã lấy
           </div>
         ) : (
           <div className="space-y-3 overflow-y-auto max-h-[70vh] pr-0.5">
-            {finishedOrders.slice(0, 10).map((order) => renderKanbanCard(order, "finished"))}
+            {finishedOrders.slice(0, 15).map((order) =>
+              renderKanbanCard(order, "finished")
+            )}
           </div>
         )}
       </div>
     </div>
   );
 }
-

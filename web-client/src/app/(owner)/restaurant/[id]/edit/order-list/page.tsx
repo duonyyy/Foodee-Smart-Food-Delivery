@@ -23,6 +23,8 @@ import {
   Kanban,
   LayoutGrid,
   Search,
+  UtensilsCrossed,
+  BellRing,
 } from "lucide-react";
 import { useOrderSocket } from "@/shared/socket";
 import { adminService } from "@/api/admin";
@@ -31,6 +33,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { KitchenKanban } from "./_components/kitchen-kanban";
+import { QuickMenuDrawer } from "./_components/quick-menu-drawer";
+import { playOrderChime } from "@/lib/audio-chime";
 
 const OrderDetailModal = dynamic(
   () => import("./_components/order-detail-modal").then((mod) => mod.OrderDetailModal),
@@ -51,9 +55,10 @@ export default function OrderListPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize notification sound
+  // Initialize notification sound fallback
   useEffect(() => {
     if (typeof window !== "undefined") {
       audioRef.current = new Audio("/sounds/receive.mp3");
@@ -62,9 +67,14 @@ export default function OrderListPage() {
   }, []);
 
   const playNotificationSound = () => {
-    if (soundEnabled && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(() => {});
+    if (soundEnabled) {
+      // 1. Play high-precision Web Audio API chime
+      playOrderChime(0.75);
+      // 2. Fallback to audio element if available
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+      }
     }
   };
 
@@ -305,8 +315,19 @@ export default function OrderListPage() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setIsQuickMenuOpen(true)}
+              className="gap-1.5 font-bold text-amber-800 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 dark:text-amber-300"
+              title="Bật hoặc tắt nhanh trạng thái hết món trực tiếp"
+            >
+              <UtensilsCrossed className="h-4 w-4 text-amber-600" />
+              <span>Bật/Tắt hết món</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setSoundEnabled((prev) => !prev)}
-              className="gap-2 font-medium"
+              className="gap-1.5 font-medium"
               title={soundEnabled ? "Tắt chuông báo đơn mới" : "Bật chuông báo đơn mới"}
             >
               {soundEnabled ? (
@@ -320,6 +341,19 @@ export default function OrderListPage() {
                   <span className="hidden sm:inline">Chuông: Tắt</span>
                 </>
               )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                playOrderChime(0.8);
+                toast.info("Đã thử chuông báo đơn Web Audio API");
+              }}
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+              title="Thử âm chuông Web Audio API"
+            >
+              <BellRing className="h-4 w-4" />
             </Button>
 
             <Button
@@ -676,6 +710,13 @@ export default function OrderListPage() {
         isUpdating={selectedOrder ? updatingOrders.has(selectedOrder.id) : false}
         refetchOrders={fetchAllOrders}
         isLoading={modalLoading}
+      />
+
+      {/* Quick Menu Out-of-Stock Drawer */}
+      <QuickMenuDrawer
+        open={isQuickMenuOpen}
+        onOpenChange={setIsQuickMenuOpen}
+        restaurantId={restaurantId}
       />
     </div>
   );
