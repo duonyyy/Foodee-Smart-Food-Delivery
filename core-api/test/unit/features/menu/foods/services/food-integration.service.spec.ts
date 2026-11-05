@@ -96,4 +96,73 @@ describe('FoodIntegrationService', () => {
       order: { name: 'ASC' },
     });
   });
+
+  it('batches food lookups across multiple restaurants in a single SQL query (eliminating N+1)', async () => {
+    const cache = {
+      remember: jest.fn((_key: string, _ttl: number, loader: () => Promise<unknown>) => loader()),
+    };
+    const batchService = new FoodIntegrationService(foodRepository as never, cache as never);
+    foodRepository.find.mockResolvedValue([
+      {
+        id: 'food-1',
+        name: 'Phở',
+        image: null,
+        price: '50000',
+        rating: '4.8',
+        soldCount: 20,
+        restaurant: { id: 'restaurant-1' },
+      },
+      {
+        id: 'food-2',
+        name: 'Bún bò',
+        image: null,
+        price: '55000',
+        rating: '4.7',
+        soldCount: 15,
+        restaurant: { id: 'restaurant-2' },
+      },
+    ]);
+
+    const grouped = await batchService.listMultipleRestaurantsFoodsCached(
+      ['restaurant-1', 'restaurant-2', 'restaurant-3'],
+      3,
+    );
+
+    expect(foodRepository.find).toHaveBeenCalledTimes(1);
+    expect(grouped.get('restaurant-1')).toHaveLength(1);
+    expect(grouped.get('restaurant-2')).toHaveLength(1);
+    expect(grouped.get('restaurant-3')).toEqual([]);
+  });
+
+  it('batches getOrderableItems in a single query when multiple items are requested', async () => {
+    foodRepository.find.mockResolvedValue([
+      {
+        id: 'food-1',
+        name: 'Phở',
+        price: '50000',
+        status: 'available',
+        restaurant: { id: 'restaurant-1', status: 'approved' },
+        toppings: [],
+      },
+      {
+        id: 'food-2',
+        name: 'Cơm tấm',
+        price: '45000',
+        status: 'available',
+        restaurant: { id: 'restaurant-1', status: 'approved' },
+        toppings: [],
+      },
+    ]);
+
+    const items = await service.getOrderableItems({
+      items: [
+        { foodId: 'food-1', toppingIds: [] },
+        { foodId: 'food-2', toppingIds: [] },
+      ],
+    });
+
+    expect(foodRepository.find).toHaveBeenCalledTimes(1);
+    expect(foodRepository.findOne).not.toHaveBeenCalled();
+    expect(items).toHaveLength(2);
+  });
 });

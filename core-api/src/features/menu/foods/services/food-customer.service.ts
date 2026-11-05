@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { paginate } from 'src/common/pagination/paginate';
-import { haversineDistance } from 'src/common/utils/geo.util';
+import { encodeGeohash, haversineDistance } from 'src/common/utils/geo.util';
 import { Category } from 'src/entities/category.entity';
 import { Food } from 'src/entities/food.entity';
 import { Topping } from 'src/entities/topping.entity';
@@ -179,6 +179,13 @@ export class FoodCustomerService {
     });
   }
 
+  private toGeohashPart(lat?: number, lng?: number): string | undefined {
+    if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+      return encodeGeohash(lat, lng, 6);
+    }
+    return undefined;
+  }
+
   async findAll(
     page = 1,
     pageSize = 10,
@@ -191,8 +198,7 @@ export class FoodCustomerService {
     const cacheKey = buildMenuCacheKey('food:findAll', {
       page,
       pageSize,
-      lat,
-      lng,
+      geohash: this.toGeohashPart(lat, lng),
       status,
       sortBy,
       scope,
@@ -263,28 +269,44 @@ export class FoodCustomerService {
     scope: FoodVisibilityScope = 'public',
   ): Promise<FoodPaginationResult> {
     const restaurant = await this.requireRestaurant(restaurantId);
+    const cacheKey = buildMenuCacheKey(`food:restaurant:${restaurantId}`, {
+      page,
+      pageSize,
+      geohash: this.toGeohashPart(lat, lng),
+      status,
+      sortBy,
+      scope,
+      visibility: PUBLIC_MENU_CACHE_VERSION,
+    });
 
-    const queryBuilder = this.foodRepository
-      .createQueryBuilder('food')
-      .leftJoinAndSelect('food.category', 'category')
-      .leftJoin('food.restaurant', 'restaurant')
-      .where('food.restaurant_id = :restaurantId', { restaurantId });
+    const loadItems = async (): Promise<FoodPaginationResult> => {
+      const queryBuilder = this.foodRepository
+        .createQueryBuilder('food')
+        .leftJoinAndSelect('food.category', 'category')
+        .leftJoin('food.restaurant', 'restaurant')
+        .where('food.restaurant_id = :restaurantId', { restaurantId });
 
-    this.applyFoodVisibility(queryBuilder, scope, status);
+      this.applyFoodVisibility(queryBuilder, scope, status);
 
-    this.applySortingToQueryBuilder(queryBuilder, sortBy);
+      this.applySortingToQueryBuilder(queryBuilder, sortBy);
 
-    const result = await paginate(queryBuilder, page, pageSize);
-    let itemsWithDistance = this.enrichWithDistance(result.items, lat, lng, restaurant);
+      const result = await paginate(queryBuilder, page, pageSize);
+      let itemsWithDistance = this.enrichWithDistance(result.items, lat, lng, restaurant);
 
-    if (sortBy === 'nearby' && lat && lng) {
-      itemsWithDistance = this.applySorting(itemsWithDistance, sortBy, lat, lng);
-    }
+      if (sortBy === 'nearby' && lat && lng) {
+        itemsWithDistance = this.applySorting(itemsWithDistance, sortBy, lat, lng);
+      }
 
-    return {
-      ...result,
-      items: itemsWithDistance,
+      return {
+        ...result,
+        items: itemsWithDistance,
+      };
     };
+
+    if (this.cacheService?.remember) {
+      return this.cacheService.remember(cacheKey, MENU_CACHE_TTL_SECONDS.MEDIUM, loadItems);
+    }
+    return loadItems();
   }
 
   async findByCategory(
@@ -555,43 +577,66 @@ export class FoodCustomerService {
 
     const items = await queryBuilder.getMany();
 
-    // Mapbox routing distance calculation (batch 5)
-    const itemsWithData: FoodQueryItem[] = [];
+    // Pre-filter and deduplicate restaurants by Haversine distance before calling external Mapbox API
+    const uniqueRestaurants = new Map<
+      string,
+      { lng: number; lat: number; haversineKm: number }
+    >();
 
-    for (let i = 0; i < items.length; i += 5) {
-      const batch = items.slice(i, i + 5);
+    if (lat && lng) {
+      for (const food of items) {
+        const restaurant = food.restaurant;
+        if (!restaurant?.id || !restaurant.latitude || !restaurant.longitude) continue;
+        if (uniqueRestaurants.has(restaurant.id)) continue;
 
-      const processedBatch = await Promise.all(
-        batch.map(async (food) => {
-          const restaurant = food.restaurant;
-          let distance: number | null = null;
-          let duration: number | null = null;
+        const rLat = Number(restaurant.latitude);
+        const rLng = Number(restaurant.longitude);
+        const haversineKm = haversineDistance(lat, lng, rLat, rLng);
+        // Only query road routing if straight-line distance is within plausible bound (radius * 1.5)
+        if (haversineKm <= radius * 1.5) {
+          uniqueRestaurants.set(restaurant.id, { lng: rLng, lat: rLat, haversineKm });
+        }
+      }
+    }
 
-          if (lat && lng && restaurant?.latitude && restaurant?.longitude) {
-            const result = await this.routeService.getDistanceAndDuration(
-              [Number(lng), Number(lat)],
-              [Number(restaurant.longitude), Number(restaurant.latitude)],
-            );
+    const restaurantMetrics = new Map<
+      string,
+      { distance: number | null; duration: number | null }
+    >();
+    const restaurantEntries = Array.from(uniqueRestaurants.entries());
 
-            if (result) {
-              distance = Math.round(result.distanceKm * 10) / 10;
-              duration = Math.round(result.durationMin);
-            }
+    for (let i = 0; i < restaurantEntries.length; i += 5) {
+      const batch = restaurantEntries.slice(i, i + 5);
+      await Promise.all(
+        batch.map(async ([restaurantId, coords]) => {
+          const result = await this.routeService.getDistanceAndDuration(
+            [Number(lng), Number(lat)],
+            [coords.lng, coords.lat],
+          );
+          if (result) {
+            restaurantMetrics.set(restaurantId, {
+              distance: Math.round(result.distanceKm * 10) / 10,
+              duration: Math.round(result.durationMin),
+            });
+          } else {
+            restaurantMetrics.set(restaurantId, { distance: null, duration: null });
           }
-
-          return {
-            ...food,
-            restaurant: {
-              ...restaurant,
-              distance,
-              deliveryTime: duration,
-            },
-          };
         }),
       );
-
-      itemsWithData.push(...processedBatch);
     }
+
+    const itemsWithData: FoodQueryItem[] = items.map((food) => {
+      const restaurant = food.restaurant;
+      const metrics = restaurant?.id ? restaurantMetrics.get(restaurant.id) : undefined;
+      return {
+        ...food,
+        restaurant: {
+          ...restaurant,
+          distance: metrics?.distance ?? null,
+          deliveryTime: metrics?.duration ?? null,
+        },
+      };
+    });
 
     const filtered =
       lat && lng
@@ -626,7 +671,6 @@ export class FoodCustomerService {
       .leftJoinAndSelect('food.category', 'category')
       .leftJoinAndSelect('food.toppings', 'toppings')
       .leftJoinAndSelect('restaurant.address', 'address')
-      .leftJoinAndSelect('restaurant.user', 'user')
       .where('food.id = :id', { id });
     this.applyPublicMenuVisibility(queryBuilder);
     const food = await queryBuilder.getOne();
@@ -635,21 +679,25 @@ export class FoodCustomerService {
       throw new NotFoundException(`Food with ID ${id} not found`);
     }
 
-    const rawStats = await this.foodRepository.query(
-      `
-      SELECT
-        COUNT(r.id) AS total_reviews,
-        AVG(r.rating) AS average_rating
-      FROM reviews r
-      WHERE r.food_id = $1
-    `,
-      [id],
-    );
+    let totalReviews = 0;
+    let averageRating: number | null = null;
+    if (typeof this.foodRepository.query === 'function') {
+      const rawStats = await this.foodRepository.query(
+        `
+        SELECT
+          COUNT(r.id) AS total_reviews,
+          AVG(r.rating) AS average_rating
+        FROM reviews r
+        WHERE r.food_id = $1
+      `,
+        [id],
+      );
 
-    const totalReviews = rawStats[0]?.total_reviews ? parseInt(rawStats[0].total_reviews, 10) : 0;
-    const averageRating = rawStats[0]?.average_rating
-      ? parseFloat(rawStats[0].average_rating)
-      : null;
+      totalReviews = rawStats[0]?.total_reviews ? parseInt(rawStats[0].total_reviews, 10) : 0;
+      averageRating = rawStats[0]?.average_rating
+        ? parseFloat(rawStats[0].average_rating)
+        : null;
+    }
 
     let distance: number | null = null;
     let deliveryTime: number | null = null;
@@ -682,19 +730,30 @@ export class FoodCustomerService {
   }
 
   async getToppingsByFood(foodId: string): Promise<Topping[]> {
-    const queryBuilder = this.foodRepository
-      .createQueryBuilder('food')
-      .leftJoinAndSelect('food.toppings', 'toppings')
-      .leftJoin('food.restaurant', 'restaurant')
-      .where('food.id = :foodId', { foodId });
-    this.applyPublicMenuVisibility(queryBuilder);
-    const food = await queryBuilder.getOne();
+    const loadToppings = async (): Promise<Topping[]> => {
+      const queryBuilder = this.foodRepository
+        .createQueryBuilder('food')
+        .leftJoinAndSelect('food.toppings', 'toppings')
+        .leftJoin('food.restaurant', 'restaurant')
+        .where('food.id = :foodId', { foodId });
+      this.applyPublicMenuVisibility(queryBuilder);
+      const food = await queryBuilder.getOne();
 
-    if (!food) {
-      throw new NotFoundException(`Food with ID ${foodId} not found`);
+      if (!food) {
+        throw new NotFoundException(`Food with ID ${foodId} not found`);
+      }
+
+      return food.toppings ?? [];
+    };
+
+    if (this.cacheService?.remember) {
+      return this.cacheService.remember(
+        `food:${foodId}:toppings`,
+        MENU_CACHE_TTL_SECONDS.LONG,
+        loadToppings,
+      );
     }
-
-    return food.toppings ?? [];
+    return loadToppings();
   }
 
   async findExactFoodByName(name: string, restaurantId?: string): Promise<Food | null> {

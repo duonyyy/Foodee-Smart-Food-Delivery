@@ -1,8 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Food } from 'src/entities/food.entity';
 import { AppCacheService } from 'src/infra/cache/public-api';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { type CatalogChatFood } from '../../types/catalog-chat.types';
 import { type FoodPreview } from '../../types/food-discovery.types';
 import {
@@ -24,7 +24,7 @@ export class FoodIntegrationService {
   constructor(
     @InjectRepository(Food)
     private readonly foodRepository: Repository<Food>,
-    private readonly cache: AppCacheService,
+    @Optional() private readonly cache?: AppCacheService,
   ) {}
 
   listRestaurantFoodsCached(
@@ -37,9 +37,71 @@ export class FoodIntegrationService {
       ['pageSize', pageSize],
       ['restaurantId', restaurantId],
     ])}`;
+    if (!this.cache?.remember) {
+      return this.listRestaurantFoods(restaurantId, page, pageSize);
+    }
     return this.cache.remember(cacheKey, 60, () =>
       this.listRestaurantFoods(restaurantId, page, pageSize),
     );
+  }
+
+  /**
+   * Batch load top available foods for multiple restaurants in a single SQL query (fixes N+1 in /restaurants/popular).
+   */
+  async listMultipleRestaurantsFoodsCached(
+    restaurantIds: string[],
+    limitPerRestaurant = 3,
+  ): Promise<Map<string, FoodPreview[]>> {
+    const uniqueIds = Array.from(new Set(restaurantIds.filter(Boolean)));
+    const result = new Map<string, FoodPreview[]>(uniqueIds.map((id) => [id, []]));
+    if (uniqueIds.length === 0) {
+      return result;
+    }
+
+    const cacheKey = `restaurant:foods:batch:${JSON.stringify([
+      ['limit', limitPerRestaurant],
+      ['restaurantIds', [...uniqueIds].sort()],
+    ])}`;
+
+    const loadBatch = async (): Promise<Record<string, FoodPreview[]>> => {
+      const grouped: Record<string, FoodPreview[]> = {};
+      for (const id of uniqueIds) {
+        grouped[id] = [];
+      }
+
+      if (typeof this.foodRepository.find === 'function') {
+        const foods = await this.foodRepository.find({
+          where: { restaurant: { id: In(uniqueIds) }, status: 'available' },
+          relations: ['restaurant'],
+          order: { soldCount: 'DESC' },
+        });
+
+        for (const food of foods) {
+          const rId = food.restaurant?.id;
+          if (!rId || !grouped[rId] || grouped[rId].length >= limitPerRestaurant) {
+            continue;
+          }
+          grouped[rId].push({
+            foodId: food.id,
+            name: food.name ?? null,
+            image: food.image ?? null,
+            price: food.price == null ? null : Number(food.price),
+            rating: food.rating == null ? null : Number(food.rating),
+            soldCount: food.soldCount ?? null,
+          });
+        }
+      }
+      return grouped;
+    };
+
+    const cachedRecord = this.cache?.remember
+      ? await this.cache.remember(cacheKey, 60, loadBatch)
+      : await loadBatch();
+
+    for (const id of uniqueIds) {
+      result.set(id, cachedRecord[id] ?? []);
+    }
+    return result;
   }
 
   // --- 1. Restaurant discovery (Khám phá món ăn cho Restaurant/Search) ---
@@ -69,13 +131,20 @@ export class FoodIntegrationService {
   // --- 2. Catalog chat (Hỗ trợ AI Chatbot gợi ý món ăn) ---
 
   async listAvailableFoods(): Promise<CatalogChatFood[]> {
-    const foods = await this.foodRepository.find({
-      where: { status: 'available' },
-      relations: ['restaurant'],
-      order: { name: 'ASC' },
-    });
+    const loadCatalog = async (): Promise<CatalogChatFood[]> => {
+      const foods = await this.foodRepository.find({
+        where: { status: 'available' },
+        relations: ['restaurant'],
+        order: { name: 'ASC' },
+      });
 
-    return foods.flatMap((food) => this.toCatalogChatFoods(food));
+      return foods.flatMap((food) => this.toCatalogChatFoods(food));
+    };
+
+    if (this.cache?.remember) {
+      return this.cache.remember('food:catalog:available', 60, loadCatalog);
+    }
+    return loadCatalog();
   }
 
   async findAvailableFood(foodId: string, restaurantId?: string): Promise<CatalogChatFood | null> {
@@ -124,6 +193,25 @@ export class FoodIntegrationService {
   // --- 4. Orderable menu (Xác thực thông tin và topping khi tạo đơn hàng) ---
 
   async getOrderableItems(request: GetOrderableItemsRequest): Promise<OrderableMenuItem[]> {
+    if (request.items.length === 0) {
+      return [];
+    }
+
+    // Batch fetch all requested foods in a single query when repository.find is available
+    if (request.items.length > 1 && typeof this.foodRepository.find === 'function') {
+      const uniqueFoodIds = Array.from(new Set(request.items.map((item) => item.foodId)));
+      const foods = await this.foodRepository.find({
+        where: { id: In(uniqueFoodIds) },
+        relations: ['restaurant', 'toppings'],
+      });
+      const foodMap = new Map(foods.map((food) => [food.id, food]));
+
+      return request.items.map((item) => {
+        const food = foodMap.get(item.foodId);
+        return this.mapEntityToOrderableMenuItem(item.foodId, food ?? null, item.toppingIds ?? []);
+      });
+    }
+
     return Promise.all(
       request.items.map((item) => this.toOrderableMenuItem(item.foodId, item.toppingIds ?? [])),
     );
@@ -137,6 +225,14 @@ export class FoodIntegrationService {
       where: { id: foodId },
       relations: ['restaurant', 'toppings'],
     });
+    return this.mapEntityToOrderableMenuItem(foodId, food, toppingIds);
+  }
+
+  private mapEntityToOrderableMenuItem(
+    foodId: string,
+    food: Food | null,
+    toppingIds: string[],
+  ): OrderableMenuItem {
     if (!food?.restaurant) throw new NotFoundException(`Food with ID ${foodId} not found`);
 
     const toppingsById = new Map((food.toppings ?? []).map((topping) => [topping.id, topping]));

@@ -28,13 +28,15 @@ export class PublicRestaurantsController {
   @ApiResponse({ status: 200, schema: { example: { items: [{ id: 'uuid', foods: [] }] } } })
   async getPopularRestaurants(@Query() query: RestaurantDiscoveryQueryDto) {
     const { items } = await this.restaurants.getTopRestaurants(1, 3, query.lat, query.lng);
+    const foodsByRestaurant = await this.foods.listMultipleRestaurantsFoodsCached(
+      items.map((restaurant) => restaurant.id),
+      3,
+    );
     return {
-      items: await Promise.all(
-        items.map(async (restaurant) => ({
-          ...restaurant,
-          foods: await this.foods.listRestaurantFoodsCached(restaurant.id, 1, 3),
-        })),
-      ),
+      items: items.map((restaurant) => ({
+        ...restaurant,
+        foods: foodsByRestaurant.get(restaurant.id) ?? [],
+      })),
     };
   }
 
