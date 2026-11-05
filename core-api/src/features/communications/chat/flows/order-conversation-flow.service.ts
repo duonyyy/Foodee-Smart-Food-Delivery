@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AddressService } from 'src/features/locations/public-api';
 import { OrderMessagingService } from 'src/features/orders/public-api';
 import { ChatLlmService } from '../services/chat-llm.service';
@@ -12,6 +13,7 @@ export class OrderConversationFlowService {
     private readonly orderMessaging: OrderMessagingService,
     private readonly orderValidationService: ChatOrderValidationService,
     private readonly llmService: ChatLlmService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   isStartRequest(userMessage: string): boolean {
@@ -263,8 +265,14 @@ export class OrderConversationFlowService {
     metadata.orderItems = [];
     metadata.selectedAddress = undefined;
 
+    const rawFrontendUrl =
+      this.configService?.get<string>('FRONTEND_URL') ||
+      process.env.FRONTEND_URL ||
+      'http://localhost:3000';
+    const frontendUrl = rawFrontendUrl.replace(/\/$/, '');
+
     return {
-      reply: `Đơn hàng của bạn đã được tạo thành công. Bạn có thể xem chi tiết đơn hàng tại: https://foodee-fe.onrender.com/order/${orderResponse.orderId}. Tổng tiền: ${orderResponse.total}. Cảm ơn bạn đã sử dụng dịch vụ của Foodee <3.`,
+      reply: `Đơn hàng của bạn đã được tạo thành công. Bạn có thể xem chi tiết đơn hàng tại: ${frontendUrl}/order/${orderResponse.orderId}. Tổng tiền: ${orderResponse.total}. Cảm ơn bạn đã sử dụng dịch vụ của Foodee <3.`,
       action: 'placeOrder',
       metadata: { ...metadata, orderId: orderResponse.orderId, total: orderResponse.total },
     };

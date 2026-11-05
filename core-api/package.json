@@ -5,6 +5,9 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -15,11 +18,13 @@
     "start:prod": "node --max-old-space-size=384 --optimize-for-size dist/main.js",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,test}/**/*.ts\" --fix",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --runInBand",
     "test:unit": "jest --runInBand --testPathPattern=test/unit",
     "test:integration": "jest --runInBand --testPathPattern=test/integration",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
+    "test:ci": "npm run format:check && npm run lint && npm run typecheck && npm run test:cov && npm run test:integration",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js",
@@ -33,14 +38,11 @@
     "migration:run:compiled": "node ./node_modules/typeorm/cli.js migration:run -d dist/config/typeorm.data-source.js"
   },
   "dependencies": {
-    "@apollo/server": "^4.12.1",
     "@mapbox/mapbox-sdk": "^0.16.1",
-    "@nestjs/apollo": "^13.1.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.2",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.1",
-    "@nestjs/graphql": "^13.1.0",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/passport": "^11.0.5",
@@ -62,10 +64,6 @@
     "date-fns-tz": "^3.2.0",
     "express-session": "^1.18.1",
     "firebase-admin": "^13.1.0",
-    "graphql": "^16.11.0",
-    "graphql-subscriptions": "^3.0.0",
-    "graphql-type-json": "^0.3.2",
-    "graphql-ws": "^6.0.5",
     "ioredis": "^5.10.1",
     "minio": "^8.0.7",
     "moment": "^2.30.1",
@@ -81,7 +79,6 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.4",
-    "type-graphql": "^2.0.0-rc.2",
     "typeorm": "^0.3.20"
   },
   "devDependencies": {

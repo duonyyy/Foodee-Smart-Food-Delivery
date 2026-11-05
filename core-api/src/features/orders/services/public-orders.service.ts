@@ -4,7 +4,7 @@ import { Order } from 'src/entities/order.entity';
 import { OrderDetail } from 'src/entities/orderDetail.entity';
 import { Repository } from 'typeorm';
 
-/** Shared order lookups used by HTTP, GraphQL and Orders event handlers. */
+/** Shared order lookups used by HTTP, WebSocket and Orders event handlers. */
 @Injectable()
 export class PublicOrdersService {
   constructor(

@@ -15,7 +15,6 @@ import { IdentityModule } from 'src/features/users/public-api';
 import { AdminOrdersController } from './controllers/admin-orders.controller';
 import { CustomerOrdersController } from './controllers/customer-orders.controller';
 import { MerchantOrdersController } from './controllers/merchant-orders.controller';
-import { OrderResolver } from './controllers/order.resolver';
 import { PublicOrdersController } from './controllers/public-orders.controller';
 import { OrderGateway } from './gateways/order.gateway';
 import { AdminOrdersService } from './services/admin-orders.service';
@@ -28,13 +27,12 @@ import {
   DeliveryAssignmentRequestedOrderHandler,
   DeliveryCompletedOrderHandler,
   PaymentSucceededOrderHandler,
-  ShipperOfferRequestedOrderHandler,
 } from './services/order-events.handler';
 import { OrderMessagingService } from './services/order-messaging.service';
 import { OrderRulesService } from './services/order-rules.service';
 import { PublicOrdersService } from './services/public-orders.service';
 
-/** Owns order HTTP/GraphQL APIs, role services, commands, queries and order persistence wiring. */
+/** Owns order HTTP and WebSocket APIs, role services, commands, queries and order persistence wiring. */
 @Module({
   imports: [
     TypeOrmModule.forFeature([Order, OrderDetail]),
@@ -63,13 +61,11 @@ import { PublicOrdersService } from './services/public-orders.service';
     OrderRulesService,
     PublicOrdersService,
     OrderMessagingService,
-    OrderResolver,
     OrderGateway,
     PaymentSucceededOrderHandler,
     DeliveryCompletedOrderHandler,
     DeliveryAssignmentRequestedOrderHandler,
     OrderDeliveryService,
-    ShipperOfferRequestedOrderHandler,
     OrderAnalyticsService,
   ],
   exports: [

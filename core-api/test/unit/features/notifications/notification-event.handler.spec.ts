@@ -5,30 +5,29 @@ import { NOTIFICATION_REQUESTED_EVENT } from 'src/common/events/notification-req
 import { ORDER_CREATED_EVENT } from 'src/common/events/order-events';
 import { PAYMENT_SUCCEEDED_EVENT } from 'src/common/events/payment-succeeded.event';
 import { Notification } from 'src/entities/notification.entity';
+import { NotificationGateway } from 'src/features/notifications/gateways/notification.gateway';
 import { NotificationEventHandler } from 'src/features/notifications/handlers/notification-event.handler';
 import { NotificationDeadLetterService } from 'src/features/notifications/services/notification-dead-letter.service';
 import { NotificationService } from 'src/features/notifications/services/notification.service';
-import { pubSub } from 'src/pubsub';
-
-jest.mock('src/pubsub', () => ({
-  pubSub: { publish: jest.fn() },
-}));
 
 describe('NotificationEventHandler', () => {
   let handler: NotificationEventHandler;
   let eventBus: InProcessEventBus;
   let notificationService: { createFromEvent: jest.Mock };
   let deadLetterService: { record: jest.Mock };
+  let notificationGateway: { sendNotification: jest.Mock };
 
   beforeEach(async () => {
     notificationService = { createFromEvent: jest.fn() };
     deadLetterService = { record: jest.fn().mockResolvedValue(undefined) };
+    notificationGateway = { sendNotification: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationEventHandler,
         InProcessEventBus,
         { provide: NotificationService, useValue: notificationService },
         { provide: NotificationDeadLetterService, useValue: deadLetterService },
+        { provide: NotificationGateway, useValue: notificationGateway },
       ],
     }).compile();
 
@@ -134,7 +133,7 @@ describe('NotificationEventHandler', () => {
 
     expect(notificationService.createFromEvent).toHaveBeenCalledTimes(2);
 
-    expect(pubSub.publish).toHaveBeenCalledTimes(1);
+    expect(notificationGateway.sendNotification).toHaveBeenCalledTimes(1);
   });
 
   it('retries then records a dead letter without throwing to the source event', async () => {
@@ -159,13 +158,15 @@ describe('NotificationEventHandler', () => {
     );
   });
 
-  it('does not replay persistence when GraphQL publication fails', async () => {
+  it('does not replay persistence when Socket.IO publication fails', async () => {
     const savedNotification = { id: 'n4', receiveUser: 'customer-1' } as Notification;
     notificationService.createFromEvent.mockResolvedValue({
       notification: savedNotification,
       created: true,
     });
-    (pubSub.publish as jest.Mock).mockRejectedValueOnce(new Error('subscription unavailable'));
+    notificationGateway.sendNotification.mockImplementationOnce(() => {
+      throw new Error('socket unavailable');
+    });
 
     await eventBus.publish(NOTIFICATION_REQUESTED_EVENT, {
       idempotencyKey: 'notification-1',

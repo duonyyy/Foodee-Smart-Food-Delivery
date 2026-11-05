@@ -20,7 +20,6 @@ import {
   DeliveryAssignmentController,
   ShipperDeliveryController,
 } from './controllers/shipper-delivery.controller';
-import { ShipperResolver } from './controllers/shipper.resolver';
 import { DeliveryGateway } from './gateways/delivery.gateway';
 import { DeliveryEventsHandler } from './handlers/delivery-events.handler';
 import { DELIVERY_ASSIGNMENT_QUEUE } from './queue/delivery-queue.constants';
@@ -83,7 +82,6 @@ const deliveryQueueModule = QueueModule.register({
     ShipperDeliveryService,
     DeliveryReportService,
     AdminDeliveryService,
-    ShipperResolver,
     DeliveryGateway,
     RedisPendingAssignmentStore,
   ],

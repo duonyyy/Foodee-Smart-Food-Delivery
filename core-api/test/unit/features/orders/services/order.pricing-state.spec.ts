@@ -9,8 +9,6 @@ import { MerchantOrdersService } from 'src/features/orders/services/merchant-ord
 import { OrderCreationService } from 'src/features/orders/services/order-creation.service';
 import { PublicOrdersService } from 'src/features/orders/services/public-orders.service';
 
-jest.mock('src/pubsub', () => ({ pubSub: { publish: jest.fn().mockResolvedValue(true) } }));
-
 describe('Order pricing and state characterization', () => {
   const createService = (overrides: Record<string, unknown> = {}) => {
     const dependencies = {

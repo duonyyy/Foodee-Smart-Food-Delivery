@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OutboxEvent, OutboxEventStatus } from 'src/entities/outbox-event.entity';
@@ -21,6 +22,7 @@ export class OutboxService {
     @InjectRepository(OutboxEvent)
     private readonly outboxRepository: Repository<OutboxEvent>,
     private readonly eventBus: InProcessEventBus,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   async enqueue(manager: EntityManager, request: EnqueueOutboxEventRequest): Promise<OutboxEvent> {
@@ -96,8 +98,13 @@ export class OutboxService {
   }
 
   private isDispatcherEnabled(): boolean {
-    const configured = process.env.OUTBOX_DISPATCHER_ENABLED;
-    if (configured != null) return configured === 'true';
-    return process.env.QUEUE_PROCESSOR_ENABLED !== 'true';
+    const configured =
+      this.configService?.get<string>('OUTBOX_DISPATCHER_ENABLED') ??
+      process.env.OUTBOX_DISPATCHER_ENABLED;
+    if (configured != null) return String(configured) === 'true';
+    const queueProcessor =
+      this.configService?.get<string>('QUEUE_PROCESSOR_ENABLED') ??
+      process.env.QUEUE_PROCESSOR_ENABLED;
+    return String(queueProcessor) !== 'true';
   }
 }

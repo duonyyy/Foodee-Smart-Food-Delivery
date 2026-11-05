@@ -1,20 +1,19 @@
 # Auth
 
-Auth sở hữu nghiệp vụ xác thực người dùng, sinh/kiểm tra JSON Web Token (JWT), OTP qua email/SMS, đăng nhập mạng xã hội (Google OAuth) và cung cấp các Guard phân quyền (`AuthGuard`, `RolesGuard`, `WebSocketAuthGuard`) cho toàn bộ hệ thống.
+Auth sở hữu nghiệp vụ xác thực người dùng, sinh/kiểm tra JSON Web Token (JWT), OTP qua email/SMS, đăng nhập mạng xã hội (Google OAuth) và cung cấp các Guard phân quyền (`AuthGuard`, `RolesGuard`, `WsJwtGuard`) cho toàn bộ hệ thống.
 
 ## Cấu trúc và vai trò
 
 ```text
 auth/
-├── contracts/
-│   └── graphql-subscription-context.ts # Context xác thực kết nối WebSocket GraphQL
 ├── decorators/
-│   └── permissions.decorator.ts        # @Permissions(...rules)
+│   ├── permissions.decorator.ts        # @Permissions(...rules)
+│   └── ws-current-user.decorator.ts    # @WsCurrentUser()
 ├── dto/                                # Register, Login, Driver, OTP, Password Reset DTOs
 ├── guards/
 │   ├── auth.guard.ts                   # Xác thực Bearer JWT cho HTTP
 │   ├── roles.guard.ts                  # Kiểm tra Permission từ token cho HTTP
-│   └── websocket-auth.guard.ts         # Xác thực kết nối WebSocket
+│   └── ws-jwt.guard.ts                 # Xác thực kết nối WebSocket Socket.IO
 ├── interfaces/
 │   └── authenticated-request.interface.ts # Re-export từ src/shared/types/auth
 ├── services/

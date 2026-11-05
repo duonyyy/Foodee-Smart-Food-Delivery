@@ -14,7 +14,3 @@ export interface AuthenticatedRequest {
     [key: string]: unknown;
   };
 }
-
-export interface GraphqlAuthContext {
-  req: AuthenticatedRequest;
-}

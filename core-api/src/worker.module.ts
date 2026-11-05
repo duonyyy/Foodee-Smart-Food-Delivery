@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { validateEnv } from './config/env.validation';
 import minioConfig from './config/minio.config';
 import { DeliveryModule, FindShipperProcessor } from './features/delivery/public-api';
 import { AppCacheModule } from './infra/cache/cache.module';
@@ -24,6 +25,7 @@ const deliveryRegistersProcessor = (
       isGlobal: true,
       cache: true,
       load: [minioConfig],
+      validate: validateEnv,
     }),
     DatabaseModule,
     AppCacheModule,

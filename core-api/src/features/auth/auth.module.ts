@@ -9,7 +9,6 @@ import { AuthService } from './auth.service';
 import { AuthGuard } from './guards/auth.guard';
 import { OptionalAuthGuard } from './guards/optional-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
-import { WebSocketAuthGuard } from './guards/websocket-auth.guard';
 import { WsJwtGuard } from './guards/ws-jwt.guard';
 import { OtpService } from './services/otp.service';
 import { PasswordResetService } from './services/password-reset.service';
@@ -40,7 +39,6 @@ import { SocialAuthService } from './services/social-auth.service';
     AuthGuard,
     OptionalAuthGuard,
     RolesGuard,
-    WebSocketAuthGuard,
     WsJwtGuard,
   ],
   exports: [
@@ -48,7 +46,6 @@ import { SocialAuthService } from './services/social-auth.service';
     AuthGuard,
     OptionalAuthGuard,
     RolesGuard,
-    WebSocketAuthGuard,
     WsJwtGuard,
     JwtModule,
     UsersModule,

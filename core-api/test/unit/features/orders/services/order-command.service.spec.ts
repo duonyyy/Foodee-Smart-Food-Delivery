@@ -2,7 +2,6 @@ import { BadRequestException } from '@nestjs/common';
 import { InProcessEventBus } from 'src/common/events/in-process-event-bus.service';
 import { AdminOrdersService } from 'src/features/orders/services/admin-orders.service';
 import { MerchantOrdersService } from 'src/features/orders/services/merchant-orders.service';
-import { pubSub } from 'src/pubsub';
 import { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 
 describe('MerchantOrdersService and AdminOrdersService commands', () => {
@@ -45,6 +44,10 @@ describe('MerchantOrdersService and AdminOrdersService commands', () => {
       paymentCheckoutCommands: {
         cancelPendingCheckoutForOrder: jest.fn(() => Promise.resolve()),
       },
+      orderGateway: {
+        notifyOrderStatusUpdated: jest.fn(),
+        notifyOrderCreated: jest.fn(),
+      },
     };
 
     const merchantService = new MerchantOrdersService(
@@ -52,6 +55,7 @@ describe('MerchantOrdersService and AdminOrdersService commands', () => {
       dependencies.orderCoreService as never,
       dependencies.eventBus as unknown as InProcessEventBus,
       dependencies.outboxService as never,
+      dependencies.orderGateway as never,
     );
 
     const adminService = new AdminOrdersService(
@@ -60,6 +64,7 @@ describe('MerchantOrdersService and AdminOrdersService commands', () => {
       dependencies.eventBus as unknown as InProcessEventBus,
       dependencies.outboxService as never,
       dependencies.paymentCheckoutCommands as never,
+      dependencies.orderGateway as never,
     );
 
     return {
@@ -76,7 +81,6 @@ describe('MerchantOrdersService and AdminOrdersService commands', () => {
 
   it('handles a valid status command and publishes notification after save', async () => {
     const { merchantService, dependencies, transactionalRepository } = createServices();
-    const publishSpy = jest.spyOn(pubSub, 'publish').mockResolvedValue(undefined);
 
     await expect(
       merchantService.updateOrderStatus('order-1', OrderStatus.CONFIRMED),
@@ -85,9 +89,9 @@ describe('MerchantOrdersService and AdminOrdersService commands', () => {
     });
 
     expect(transactionalRepository.save).toHaveBeenCalled();
-    expect(publishSpy).toHaveBeenCalledWith('orderStatusUpdated', {
-      orderStatusUpdated: expect.objectContaining({ status: OrderStatus.CONFIRMED }) as unknown,
-    });
+    expect(dependencies.orderGateway.notifyOrderStatusUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({ status: OrderStatus.CONFIRMED }),
+    );
     expect(dependencies.eventBus.publish).toHaveBeenCalled();
   });
 
@@ -177,8 +181,7 @@ describe('MerchantOrdersService and AdminOrdersService commands', () => {
   });
 
   it('completes an order from DeliveryCompleted', async () => {
-    const { adminService, transactionalRepository, order } = createServices();
-    const publishSpy = jest.spyOn(pubSub, 'publish').mockResolvedValue(undefined);
+    const { adminService, transactionalRepository, order, dependencies } = createServices();
     order.status = OrderStatus.DELIVERING;
 
     await expect(adminService.completeFromDelivery(order.id)).resolves.toMatchObject({
@@ -188,19 +191,18 @@ describe('MerchantOrdersService and AdminOrdersService commands', () => {
     expect(transactionalRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ status: OrderStatus.COMPLETED }),
     );
-    expect(publishSpy).toHaveBeenCalledWith('orderStatusUpdated', {
-      orderStatusUpdated: expect.objectContaining({ status: OrderStatus.COMPLETED }) as unknown,
-    });
+    expect(dependencies.orderGateway.notifyOrderStatusUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({ status: OrderStatus.COMPLETED }),
+    );
   });
 
   it('handles a retried DeliveryCompleted event idempotently', async () => {
-    const { adminService, transactionalRepository, order } = createServices();
-    const publishSpy = jest.spyOn(pubSub, 'publish').mockResolvedValue(undefined);
+    const { adminService, transactionalRepository, order, dependencies } = createServices();
     order.status = OrderStatus.COMPLETED;
 
     await expect(adminService.completeFromDelivery(order.id)).resolves.toBe(order);
 
     expect(transactionalRepository.save).not.toHaveBeenCalled();
-    expect(publishSpy).not.toHaveBeenCalled();
+    expect(dependencies.orderGateway.notifyOrderStatusUpdated).not.toHaveBeenCalled();
   });
 });

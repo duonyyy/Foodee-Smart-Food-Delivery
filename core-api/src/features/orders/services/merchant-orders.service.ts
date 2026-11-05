@@ -11,7 +11,6 @@ import {
 } from 'src/common/events/order-events';
 import { OutboxService } from 'src/common/events/outbox.service';
 import { Order } from 'src/entities/order.entity';
-import { pubSub } from 'src/pubsub';
 import { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 import { Repository } from 'typeorm';
 import { OrderGateway } from '../gateways/order.gateway';
@@ -123,7 +122,6 @@ export class MerchantOrdersService {
     order.status = nextStatus;
     const updatedOrder = await this.saveWithStatusEvent(order, previousStatus);
 
-    await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: updatedOrder });
     this.orderGateway?.notifyOrderStatusUpdated(updatedOrder);
     this.logger.log(`Order ${id} status updated to ${nextStatus}`);
 

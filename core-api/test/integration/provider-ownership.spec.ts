@@ -1,7 +1,7 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { ConfigService } from '@nestjs/config';
 import { AuthModule } from 'src/features/auth/auth.module';
-import { AuthGuard, RolesGuard, WebSocketAuthGuard } from 'src/features/auth/public-api';
+import { AuthGuard, RolesGuard, WsJwtGuard } from 'src/features/auth/public-api';
 import { OrderCreationService } from 'src/features/orders/public-api';
 import { PaymentModule } from 'src/features/payments/payment.module';
 import { SystemConstraintsModule } from 'src/features/system-constraints/public-api';
@@ -23,9 +23,9 @@ describe('provider ownership', () => {
     expect(providers).not.toContain(ConfigService);
   });
 
-  it('provides and exports WebSocketAuthGuard for authenticated subscriptions', () => {
-    expect(getModuleProviders(AuthModule)).toContain(WebSocketAuthGuard);
-    expect(getModuleExports(AuthModule)).toContain(WebSocketAuthGuard);
+  it('provides and exports WsJwtGuard for authenticated websocket connections', () => {
+    expect(getModuleProviders(AuthModule)).toContain(WsJwtGuard);
+    expect(getModuleExports(AuthModule)).toContain(WsJwtGuard);
   });
 
   it('keeps guard and identity query providers in their owning modules', () => {

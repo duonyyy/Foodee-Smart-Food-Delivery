@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ShipperProfile } from 'src/entities/shipperProfile.entity';
 import { UsersService } from 'src/features/users/identity-auth.public-api';
 import { IdentityUserProfileService } from 'src/features/users/identity-user-profile.public-api';
-import { pubSub } from 'src/pubsub';
 import { DataSource, EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { UpdateDriverProfileDto } from '../../dto/update-driver-dto';
 import {
@@ -163,15 +162,6 @@ export class ShipperProfileService {
   async updateLocation(shipperId: string, latitude: number, longitude: number) {
     const profile = await this.profileRepository.findOne({ where: { userId: shipperId } });
     if (!profile) throw new NotFoundException('Shipper not found');
-
-    await pubSub.publish('shipperLocationUpdated', {
-      shipperLocationUpdated: {
-        shipperId,
-        latitude,
-        longitude,
-        updatedAt: new Date(),
-      },
-    });
 
     return { message: 'Location updated successfully', success: true };
   }

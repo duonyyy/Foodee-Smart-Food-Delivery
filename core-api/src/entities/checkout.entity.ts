@@ -1,5 +1,4 @@
-import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
-import GraphQLJSON from 'graphql-type-json'; // Bạn cần cài package này
+ // Bạn cần cài package này
 import {
   Column,
   CreateDateColumn,
@@ -15,20 +14,13 @@ export enum CheckoutStatus {
   CANCELLED = 'CANCELLED',
 }
 
-// Đăng ký enum với GraphQL
-registerEnumType(CheckoutStatus, {
-  name: 'CheckoutStatus',
-});
 
-@ObjectType() // Thêm decorator ObjectType
 @Entity('checkouts')
 export class Checkout {
-  @Field(() => ID) // Thêm Field decorator
-  @PrimaryGeneratedColumn('uuid')
+    @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field({ nullable: true })
-  @Column({ type: 'uuid', nullable: true })
+    @Column({ type: 'uuid', nullable: true })
   orderId: string;
 
   /**
@@ -39,20 +31,16 @@ export class Checkout {
   @Column({ type: 'varchar', length: 28, nullable: true })
   customerId: string | null;
 
-  @Field()
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+    @Column({ type: 'decimal', precision: 10, scale: 2 })
   amount: number;
 
-  @Field()
-  @Column({ type: 'varchar', length: 3, default: 'VND' })
+    @Column({ type: 'varchar', length: 3, default: 'VND' })
   currency: string;
 
-  @Field()
-  @Column({ type: 'varchar', length: 50 })
+    @Column({ type: 'varchar', length: 50 })
   paymentMethod: string;
 
-  @Field({ nullable: true })
-  @Column({ type: 'varchar', nullable: true })
+    @Column({ type: 'varchar', nullable: true })
   paymentIntentId: string;
 
   /** Provider transaction id from a verified callback; never client supplied. */
@@ -63,21 +51,18 @@ export class Checkout {
   @Column({ type: 'varchar', nullable: true })
   webhookIdempotencyKey?: string;
 
-  @Field({ nullable: true })
-  // Redirect URLs are returned to the caller but are never persisted because
+    // Redirect URLs are returned to the caller but are never persisted because
   // provider URLs can contain signed, short-lived secrets.
   paymentUrl: string;
 
-  @Field(() => CheckoutStatus)
-  @Column({
+    @Column({
     type: 'enum',
     enum: CheckoutStatus,
     default: CheckoutStatus.PENDING,
   })
   status: CheckoutStatus;
 
-  @Field(() => GraphQLJSON, { nullable: true })
-  @Column({ type: 'jsonb', nullable: true, name: 'paymentDetails' })
+    @Column({ type: 'jsonb', nullable: true, name: 'paymentDetails' })
   providerMetadata: Record<string, unknown>;
 
   /** Durable bounded-retry state for provider reconciliation. */
@@ -90,11 +75,9 @@ export class Checkout {
   @Column({ type: 'text', nullable: true, name: 'reconciliation_last_error' })
   reconciliationLastError: string | null;
 
-  @Field()
-  @CreateDateColumn()
+    @CreateDateColumn()
   createdAt: Date;
 
-  @Field()
-  @UpdateDateColumn()
+    @UpdateDateColumn()
   updatedAt: Date;
 }

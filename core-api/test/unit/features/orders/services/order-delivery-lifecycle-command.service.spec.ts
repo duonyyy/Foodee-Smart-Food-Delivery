@@ -2,14 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { ORDER_STATUS_CHANGED_EVENT } from 'src/common/events/order-events';
 import { Order } from 'src/entities/order.entity';
 import { OrderDeliveryService } from 'src/features/orders/services/order-delivery.service';
-import { pubSub } from 'src/pubsub';
-
-jest.mock('src/pubsub', () => ({ pubSub: { publish: jest.fn().mockResolvedValue(true) } }));
 
 describe('OrderDeliveryService lifecycle', () => {
   let order: Order;
   let repository: { manager: { transaction: jest.Mock }; save: jest.Mock; findOne: jest.Mock };
   let service: OrderDeliveryService;
+  let orderGateway: { notifyOrderStatusUpdated: jest.Mock };
   const eventBus = { publish: jest.fn().mockResolvedValue(undefined) };
   const outboxService = {
     enqueue: jest.fn().mockResolvedValue({ id: 'status-event-1' }),
@@ -19,6 +17,7 @@ describe('OrderDeliveryService lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     order = Object.assign(new Order(), { id: 'order-1', status: 'shipper_received' });
+    orderGateway = { notifyOrderStatusUpdated: jest.fn() };
     repository = {
       findOne: jest.fn().mockResolvedValue(order),
       save: jest.fn().mockImplementation((value: Order) => Promise.resolve(value)),
@@ -32,6 +31,7 @@ describe('OrderDeliveryService lifecycle', () => {
       repository as never,
       eventBus as never,
       outboxService as never,
+      orderGateway as never,
     );
   });
 
@@ -42,9 +42,7 @@ describe('OrderDeliveryService lifecycle', () => {
     });
     expect(repository.save).toHaveBeenCalledWith(order);
 
-    expect(pubSub.publish as jest.Mock).toHaveBeenCalledWith('orderStatusUpdated', {
-      orderStatusUpdated: order,
-    });
+    expect(orderGateway.notifyOrderStatusUpdated).toHaveBeenCalledWith(order);
   });
 
   it('rejects a start when the order has not been received by a shipper', async () => {

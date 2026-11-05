@@ -21,7 +21,6 @@ import {
   type DeliveryDispatchCandidate,
 } from 'src/features/orders/public-api';
 import { QueueService } from 'src/infra/queue/public-api';
-import { pubSub } from 'src/pubsub';
 import type {
   DeliveryAssignmentJobData,
   PendingAssignmentState,
@@ -167,9 +166,6 @@ export class DeliveryDispatchService {
 
     const result = await this.assignOrderToShipper(assignment.orderId, shipperId);
     if (result.status === ShippingStatus.SHIPPING) {
-      await pubSub.publish('orderAssignedToShipper', {
-        orderAssignedToShipper: { orderId: assignment.orderId, shipperId },
-      });
       this.deliveryGateway?.notifyOrderAssigned(assignment.orderId, shipperId);
       this.logger.log(`Order ${assignment.orderId} accepted by shipper ${shipperId}`);
     } else {

@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -25,7 +26,6 @@ import { Order } from 'src/entities/order.entity';
 import { AuthGuard } from 'src/features/auth/public-api';
 import { PaymentService } from 'src/features/payments/public-api';
 import { CurrentActor, type CurrentActorData } from 'src/features/users/public-api';
-import { pubSub } from 'src/pubsub';
 import { CreateOrderRequestDto } from '../dto/create-order-request.dto';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { PaymentDto } from '../dto/payment.dto';
@@ -45,6 +45,7 @@ export class CustomerOrdersController {
     private readonly publicOrders: PublicOrdersService,
     private readonly paymentService: PaymentService,
     @Optional() private readonly orderGateway?: OrderGateway,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   @Post()
@@ -142,15 +143,13 @@ export class CustomerOrdersController {
 
       if (body.paymentMethod === 'cod') {
         const updatedOrder = await this.publicOrders.getOrderById(order.id);
-        await pubSub.publish('orderCreated', {
-          orderCreated: updatedOrder,
-        });
         this.orderGateway?.notifyOrderCreated(updatedOrder);
         this.logger.log(`Order ${order.id} will be paid on delivery (COD)`);
-        const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(
-          /\/$/,
-          '',
-        );
+        const rawFrontendUrl =
+          this.configService?.get<string>('FRONTEND_URL') ||
+          process.env.FRONTEND_URL ||
+          'http://localhost:3000';
+        const frontendUrl = rawFrontendUrl.replace(/\/$/, '');
         paymentUrl = `${frontendUrl}/order/${order.id}`;
       }
 

@@ -1,5 +1,4 @@
 // src/users/entities/user.entity.ts
-import { Field, ID, ObjectType } from '@nestjs/graphql';
 import {
   Column,
   CreateDateColumn,
@@ -16,92 +15,71 @@ import { Restaurant } from './restaurant.entity';
 import { Review } from './review.entity'; // Add this import
 import { Topping } from './topping.entity';
 
-@ObjectType()
 @Entity({ name: 'foods' })
 export class Food {
-  @Field(() => ID)
-  @PrimaryGeneratedColumn('uuid')
+    @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   description: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   image: string;
 
-  @Field(() => [String], { nullable: true })
-  @Column('simple-array', { nullable: true, name: 'image_urls' })
+    @Column('simple-array', { nullable: true, name: 'image_urls' })
   imageUrls: string[];
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   name: string;
 
-  @Field({ nullable: true })
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+    @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   price: number;
 
-  @Field({ nullable: true })
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'discount_percent' })
+    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'discount_percent' })
   discountPercent: number;
 
-  @Field({ nullable: true })
-  @Column({ type: 'int', default: 0, nullable: true, name: 'sold_count' })
+    @Column({ type: 'int', default: 0, nullable: true, name: 'sold_count' })
   soldCount: number;
 
-  @Field({ nullable: true })
-  @Column({ type: 'decimal', precision: 3, scale: 2, nullable: true })
+    @Column({ type: 'decimal', precision: 3, scale: 2, nullable: true })
   rating: number;
 
-  @Field({ nullable: true })
-  @Column({ type: 'int', default: 0, nullable: true, name: 'purchased_number' })
+    @Column({ type: 'int', default: 0, nullable: true, name: 'purchased_number' })
   purchasedNumber: number;
 
-  @Field(() => Category, { nullable: true })
-  @ManyToOne(() => Category, (category) => category.foods, {
+    @ManyToOne(() => Category, (category) => category.foods, {
     nullable: true,
     onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'category_id' })
   category?: Category;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   status: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   tag: string;
 
-  @Field()
-  @CreateDateColumn({ name: 'created_at' })
+    @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @Field()
-  @UpdateDateColumn({ name: 'updated_at' })
+    @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true, name: 'preparation_time' })
+    @Column({ nullable: true, name: 'preparation_time' })
   preparationTime: number;
 
-  @Field(() => Restaurant)
-  @ManyToOne(() => Restaurant)
+    @ManyToOne(() => Restaurant)
   @JoinColumn({ name: 'restaurant_id' })
   restaurant: Restaurant;
 
-  @Field(() => [OrderDetail], { nullable: true })
-  @OneToMany(() => OrderDetail, (orderDetail) => orderDetail.food)
+    @OneToMany(() => OrderDetail, (orderDetail) => orderDetail.food)
   orderDetails: OrderDetail[];
 
   // Add the reviews relationship
-  @Field(() => [Review], { nullable: true })
-  @OneToMany(() => Review, (review) => review.food)
+    @OneToMany(() => Review, (review) => review.food)
   reviews?: Review[];
 
-  @Field(() => [Topping], { nullable: true })
-  @OneToMany(() => Topping, (topping) => topping.food, { cascade: true })
+    @OneToMany(() => Topping, (topping) => topping.food, { cascade: true })
   toppings?: Topping[];
 }

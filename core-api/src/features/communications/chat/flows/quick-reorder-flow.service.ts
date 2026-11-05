@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AddressService } from 'src/features/locations/public-api';
 import { FoodIntegrationService } from 'src/features/menu/public-api';
 import { OrderMessagingService, type ChatReorderOrder } from 'src/features/orders/public-api';
@@ -10,6 +11,7 @@ export class QuickReorderFlowService {
     private readonly orderMessaging: OrderMessagingService,
     private readonly locationReader: AddressService,
     private readonly catalogReader: FoodIntegrationService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   isStartRequest(userMessage: string): boolean {
@@ -161,8 +163,14 @@ export class QuickReorderFlowService {
       items: validation.items,
     });
 
+    const rawFrontendUrl =
+      this.configService?.get<string>('FRONTEND_URL') ||
+      process.env.FRONTEND_URL ||
+      'http://localhost:3000';
+    const frontendUrl = rawFrontendUrl.replace(/\/$/, '');
+
     return {
-      reply: `Đơn hàng của bạn đã được đặt lại thành công!\nXem tại: https://foodee-fe.onrender.com/order/${newOrder.orderId}`,
+      reply: `Đơn hàng của bạn đã được đặt lại thành công!\nXem tại: ${frontendUrl}/order/${newOrder.orderId}`,
       action: 'quickOrderCreated',
       metadata: {
         ...metadata,

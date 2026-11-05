@@ -1,5 +1,3 @@
-import { Field, ID, ObjectType } from '@nestjs/graphql';
-import GraphQLJSON from 'graphql-type-json';
 import {
   Column,
   CreateDateColumn,
@@ -13,78 +11,60 @@ import {
 import { Conversation } from './conversation.entity';
 import { User } from './user.entity';
 
-@ObjectType()
 @Entity({ name: 'messages' })
 @Index(['conversation', 'createdAt']) // Index for efficient message retrieval
 @Index(['sender', 'createdAt']) // Index for sender queries
 export class Message {
-  @Field(() => ID)
-  @PrimaryGeneratedColumn('uuid')
+    @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field(() => Conversation)
-  @ManyToOne(() => Conversation, (conversation) => conversation.messages, { onDelete: 'CASCADE' })
+    @ManyToOne(() => Conversation, (conversation) => conversation.messages, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'conversation_id' })
   conversation: Conversation;
 
-  @Field(() => User)
-  @ManyToOne(() => User, { eager: true })
+    @ManyToOne(() => User, { eager: true })
   @JoinColumn({ name: 'sender_id' })
   sender: User;
 
-  @Field()
-  @Column({ type: 'text' })
+    @Column({ type: 'text' })
   content: string;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   messageType: string; // 'text', 'image', 'file', 'location', 'order_update'
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   attachmentUrl: string; // For images, files, etc.
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   attachmentType: string; // 'image/jpeg', 'application/pdf', etc.
 
-  @Field()
-  @Column({ default: false })
+    @Column({ default: false })
   isRead: boolean;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   readAt: Date;
 
-  @Field()
-  @Column({ default: false })
+    @Column({ default: false })
   isEdited: boolean;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   editedAt: Date;
 
-  @Field()
-  @Column({ default: false })
+    @Column({ default: false })
   isDeleted: boolean;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   deletedAt: Date;
 
-  @Field()
-  @CreateDateColumn()
+    @CreateDateColumn()
   createdAt: Date;
 
-  @Field()
-  @UpdateDateColumn()
+    @UpdateDateColumn()
   updatedAt: Date;
 
-  @Field(() => GraphQLJSON, { nullable: true })
-  @Column({ type: 'jsonb', nullable: true })
+    @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, unknown>; // For storing additional data like order info, location coordinates, etc.
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
+    @Column({ nullable: true })
   replyToMessageId: string; // For reply functionality
 }

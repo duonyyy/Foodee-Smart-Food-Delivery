@@ -185,16 +185,15 @@ describe('feature ownership boundaries', () => {
     expect(customerDelivery).toContain('assertCustomerCanTrackOrder');
   });
 
-  it('keeps active shipper subscription behavior inside Delivery', () => {
-    const orderResolver = source('src/features/orders/controllers/order.resolver.ts');
-    const shipperResolver = source('src/features/delivery/controllers/shipper.resolver.ts');
+  it('keeps active shipper websocket behavior inside Delivery', () => {
+    const orderGateway = source('src/features/orders/gateways/order.gateway.ts');
+    const deliveryGateway = source('src/features/delivery/gateways/delivery.gateway.ts');
 
-    expect(orderResolver).not.toContain('ActiveShipperTrackerService');
-    expect(orderResolver).not.toContain('orderConfirmedForShippers(');
-    expect(shipperResolver).toContain('ActiveShipperTrackerService');
-    expect(shipperResolver).toContain('orderConfirmedForShippers(');
-    expect(shipperResolver).toContain('src/features/orders/public-api');
-    expect(shipperResolver).not.toContain('entities/order.entity');
+    expect(orderGateway).not.toContain('notifyShipperLocationUpdated');
+    expect(orderGateway).not.toContain('notifyShipperOffer');
+    expect(deliveryGateway).toContain('notifyShipperLocationUpdated');
+    expect(deliveryGateway).toContain('notifyShipperOffer');
+    expect(deliveryGateway).not.toContain('entities/order.entity');
   });
 
   it('keeps pending assignment orchestration out of Orders', () => {

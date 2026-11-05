@@ -242,7 +242,6 @@ describe('feature public contracts', () => {
       ['src/features/orders/services/order-creation.service.ts', 'AddressService'],
       ['src/features/orders/services/order-creation.service.ts', 'CustomerRestaurantsService'],
       ['src/features/orders/services/order-creation.service.ts', 'IdentityUserQueryService'],
-      ['src/features/orders/controllers/order.resolver.ts', 'CustomerRestaurantsService'],
       ['src/features/restaurants/services/merchant-restaurants.service.ts', 'AddressService'],
       [
         'src/features/restaurants/services/merchant-restaurants.service.ts',

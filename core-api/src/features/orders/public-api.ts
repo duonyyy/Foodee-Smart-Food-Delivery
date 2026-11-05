@@ -1,9 +1,5 @@
 export { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 export {
-  orderSubscriptionGraphqlType,
-  type ShipperOrderSubscriptionPayload,
-} from './contracts/order-subscription.contract';
-export {
   CalculateOrderDto,
   CalculateOrderItemDto,
   CalculateOrderToppingDto,

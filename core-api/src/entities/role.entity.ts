@@ -1,5 +1,4 @@
 // src/roles/entities/role.entity.ts
-import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
 import { DefaultRole } from 'src/shared/types/enums/default-role.enum';
 import {
   Column,
@@ -16,20 +15,12 @@ import { User } from './user.entity';
 
 export { DefaultRole } from 'src/shared/types/enums/default-role.enum';
 
-// Register the enum for GraphQL
-registerEnumType(DefaultRole, {
-  name: 'DefaultRole',
-});
-
-@ObjectType() // Add ObjectType decorator for GraphQL
 @Entity('roles')
 export class Role {
-  @Field(() => ID) // Add Field decorator for GraphQL
-  @PrimaryGeneratedColumn('uuid')
+    @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field(() => DefaultRole) // Add Field decorator for GraphQL
-  @Column({
+    @Column({
     type: 'enum',
     enum: DefaultRole,
     default: DefaultRole.USER,
@@ -37,32 +28,25 @@ export class Role {
   })
   name: DefaultRole;
 
-  @Field({ nullable: true }) // Add Field decorator for GraphQL
-  @Column({ name: 'display_name', type: 'varchar', length: 255, nullable: true })
+    @Column({ name: 'display_name', type: 'varchar', length: 255, nullable: true })
   displayName: string;
 
-  @Field({ nullable: true }) // Add Field decorator for GraphQL
-  @Column({ type: 'text', nullable: true })
+    @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Field() // Add Field decorator for GraphQL
-  @Column({ name: 'is_system', type: 'boolean', default: false })
+    @Column({ name: 'is_system', type: 'boolean', default: false })
   isSystem: boolean;
 
-  @Field() // Add Field decorator for GraphQL
-  @CreateDateColumn({ name: 'created_at' })
+    @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @Field() // Add Field decorator for GraphQL
-  @UpdateDateColumn({ name: 'updated_at' })
+    @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @Field(() => [User], { nullable: true }) // Add Field decorator for GraphQL
-  @OneToMany(() => User, (user) => user.role)
+    @OneToMany(() => User, (user) => user.role)
   users: User[];
 
-  @Field(() => [Permission], { nullable: true }) // Add Field decorator for GraphQL
-  @ManyToMany(() => Permission, (permission) => permission.roles)
+    @ManyToMany(() => Permission, (permission) => permission.roles)
   @JoinTable({
     name: 'role_permissions',
     joinColumn: { name: 'role_id', referencedColumnName: 'id' },

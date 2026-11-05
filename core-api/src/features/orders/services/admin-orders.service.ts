@@ -19,7 +19,6 @@ import {
 import { OutboxService } from 'src/common/events/outbox.service';
 import { Order } from 'src/entities/order.entity';
 import { PaymentService } from 'src/features/payments/public-api';
-import { pubSub } from 'src/pubsub';
 import { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 import { LessThan, Repository } from 'typeorm';
 import { OrderGateway } from '../gateways/order.gateway';
@@ -90,7 +89,6 @@ export class AdminOrdersService {
     order.status = nextStatus;
     const updatedOrder = await this.saveWithStatusEvent(order, previousStatus);
 
-    await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: updatedOrder });
     this.orderGateway?.notifyOrderStatusUpdated(updatedOrder);
     this.logger.log(`Admin updated order ${id} status to ${nextStatus}`);
 
@@ -145,7 +143,6 @@ export class AdminOrdersService {
     });
 
     if (result.changed) {
-      await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
       this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
 
@@ -191,9 +188,7 @@ export class AdminOrdersService {
     });
 
     if (result.changed) {
-      await pubSub.publish('orderCreated', { orderCreated: result.order });
       this.orderGateway?.notifyOrderCreated(result.order);
-      await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
       this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
 

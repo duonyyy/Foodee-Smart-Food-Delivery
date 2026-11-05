@@ -1,15 +1,23 @@
-const developmentOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://foodee-fe.onrender.com',
-];
+import { ConfigService } from '@nestjs/config';
 
-export function allowedCorsOrigins(environment = process.env): string[] {
-  const isProduction = environment.NODE_ENV === 'production';
+const developmentOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+
+export function allowedCorsOrigins(
+  configSource: ConfigService | Record<string, string | undefined> = process.env,
+): string[] {
+  const getEnv = (key: string): string | undefined => {
+    if (configSource && typeof (configSource as ConfigService).get === 'function') {
+      return (configSource as ConfigService).get<string>(key);
+    }
+    return (configSource as Record<string, string | undefined>)?.[key];
+  };
+
+  const nodeEnv = getEnv('NODE_ENV');
+  const isProduction = nodeEnv === 'production';
   const origins = isProduction ? [] : [...developmentOrigins];
   const configured = [
-    ...(environment.ALLOWED_ORIGINS || '').split(','),
-    environment.FRONTEND_URL || '',
+    ...(getEnv('ALLOWED_ORIGINS') || '').split(','),
+    getEnv('FRONTEND_URL') || '',
   ];
 
   for (const raw of configured) {

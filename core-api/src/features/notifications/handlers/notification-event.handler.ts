@@ -18,7 +18,6 @@ import {
   PAYMENT_SUCCEEDED_EVENT,
   type PaymentSucceededEvent,
 } from 'src/common/events/payment-succeeded.event';
-import { pubSub } from 'src/pubsub';
 import { NotificationGateway } from '../gateways/notification.gateway';
 import { NotificationDeadLetterService } from '../services/notification-dead-letter.service';
 import { NotificationService } from '../services/notification.service';
@@ -156,14 +155,6 @@ export class NotificationEventHandler implements OnModuleInit, OnModuleDestroy {
   private async handle(event: NotificationEnvelope): Promise<void> {
     const persisted = await this.persistWithRetry(event);
     if (!persisted || !persisted.created) return;
-
-    try {
-      await pubSub.publish('notificationAdded', { notificationAdded: persisted.notification });
-    } catch (error) {
-      this.logger.error(
-        `notification_realtime_publish_failed key=${event.idempotencyKey}: ${this.errorMessage(error)}`,
-      );
-    }
 
     try {
       this.notificationGateway?.sendNotification(event.recipientUserId, persisted.notification);

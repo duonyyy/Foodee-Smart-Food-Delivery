@@ -17,7 +17,6 @@ import { Message } from 'src/entities/message.entity';
 import { OrderMessagingService } from 'src/features/orders/public-api';
 import { CustomerRestaurantsService } from 'src/features/restaurants/public-api';
 import { IdentityUserQueryService, type UserIdentity } from 'src/features/users/public-api';
-import { pubSub } from 'src/pubsub';
 import { Repository } from 'typeorm';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -329,11 +328,6 @@ export class MessengerService {
       text: savedMessage.content.substring(0, 20), // For privacy, just show the start
     });
 
-    await pubSub.publish('messageSent', {
-      messageSent: savedMessage,
-      conversationId: savedMessage.conversation.id,
-    });
-
     this.chatGateway?.notifyMessageSent(savedMessage.conversation.id, savedMessage);
 
     // Find the receiver (the other participant)
@@ -468,10 +462,6 @@ export class MessengerService {
 
     // Publish read receipt event
     this.logger.debug(`Publishing read receipt for conversation: ${conversationId}`);
-    await pubSub.publish('messagesRead', {
-      messagesRead: true,
-      conversationId: conversationId,
-    });
     this.chatGateway?.notifyMessagesRead(conversationId, userId);
   }
 

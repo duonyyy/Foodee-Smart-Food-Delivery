@@ -15,7 +15,7 @@ Delivery sở hữu `ShippingDetail`, `PendingShipperAssignment`, `ShipperProfil
 | API shipper và kiểm tra quyền chuyến | `services/shipper-delivery.service.ts` | Giữ một số entry point cho route shipper; các method chuyển tiếp không có caller đã được bỏ. |
 | Event Orders/Delivery | `handlers/delivery-events.handler.ts` | Một nơi đăng ký/hủy bốn subscriber; saga và earnings không tự subscribe. |
 
-HTTP controller theo vai trò ở `controllers/`: customer, shipper, admin và controller tương thích `/users/shippers/**`; GraphQL subscription ở `controllers/shipper.resolver.ts`. `queue/find-shipper.processor.ts` là worker, `adapters/redis-pending-assignment-store.service.ts` là adapter; chúng không phải role service.
+HTTP controller theo vai trò ở `controllers/`: customer, shipper, admin và controller tương thích `/users/shippers/**`; WebSocket Gateway ở `gateways/delivery.gateway.ts`. `queue/find-shipper.processor.ts` là worker, `adapters/redis-pending-assignment-store.service.ts` là adapter; chúng không phải role service.
 
 `FindShipperProcessor` chỉ được provide một lần: `DeliveryModule` có thể provide nếu cờ đã bật lúc module được nạp; `WorkerModule` kiểm tra danh sách provider thực tế của Delivery và chỉ provide khi còn thiếu. Cách này vẫn đúng nếu `.env` được nạp muộn. Worker dùng queue `find-shipper` và `DeliveryDispatchService` của module sở hữu.
 

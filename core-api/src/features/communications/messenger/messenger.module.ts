@@ -9,7 +9,6 @@ import { RestaurantsModule } from 'src/features/restaurants/public-api';
 import { IdentityModule } from 'src/features/users/public-api';
 import { ChatGateway } from './gateways/chat.gateway';
 import { MessengerController } from './messenger.controller';
-import { MessengerResolver } from './messenger.resolver';
 import { MessengerService } from './messenger.service';
 
 @Module({
@@ -22,7 +21,7 @@ import { MessengerService } from './messenger.service';
     JwtModule,
   ],
   controllers: [MessengerController],
-  providers: [MessengerService, MessengerResolver, ChatGateway],
+  providers: [MessengerService, ChatGateway],
   exports: [MessengerService, ChatGateway],
 })
 export class MessengerModule {}

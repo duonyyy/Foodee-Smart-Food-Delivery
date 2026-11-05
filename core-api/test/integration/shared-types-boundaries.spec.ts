@@ -23,7 +23,7 @@ describe('shared type ownership boundaries', () => {
       ['enums/permission.enum.ts', ['Permission', 'PermissionType']],
       [
         'auth/authenticated-user.types.ts',
-        ['AuthenticatedUser', 'AuthenticatedRequest', 'GraphqlAuthContext'],
+        ['AuthenticatedUser', 'AuthenticatedRequest'],
       ],
       [
         'delivery/delivery-assignment.types.ts',

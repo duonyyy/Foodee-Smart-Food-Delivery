@@ -17,7 +17,6 @@ import {
 } from 'src/common/events/order-events';
 import { OutboxService } from 'src/common/events/outbox.service';
 import { Order } from 'src/entities/order.entity';
-import { pubSub } from 'src/pubsub';
 import { OrderStatus } from 'src/shared/types/enums/order-status.enum';
 import { In, Repository } from 'typeorm';
 import { OrderGateway } from '../gateways/order.gateway';
@@ -89,7 +88,6 @@ export class OrderDeliveryService {
     }
 
     if (result.changed) {
-      await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
       this.orderGateway?.notifyOrderStatusUpdated(result.order);
       if (result.eventId) {
         try {
@@ -137,7 +135,6 @@ export class OrderDeliveryService {
     }
 
     if (result.changed) {
-      await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
       this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
     return { accepted: true, orderStatus: OrderStatus.SHIPPER_RECEIVED };
@@ -295,7 +292,6 @@ export class OrderDeliveryService {
     });
 
     if (result.changed) {
-      await pubSub.publish('orderStatusUpdated', { orderStatusUpdated: result.order });
       this.orderGateway?.notifyOrderStatusUpdated(result.order);
     }
     return { orderId: result.order.id, status: result.order.status };
