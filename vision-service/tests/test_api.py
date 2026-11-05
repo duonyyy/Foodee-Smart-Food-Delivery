@@ -98,6 +98,40 @@ def test_video_upload_fake_magic_bytes_rejected(client):
     assert res["code"] == "INVALID_VIDEO_BYTES"
 
 
+def test_video_upload_async_worker_and_status_polling(client):
+    video_path = PROJECT_ROOT / "samples" / "videos" / "short_video.mp4"
+    if not video_path.exists():
+        pytest.skip("short_video.mp4 sample not available")
+
+    video_bytes = video_path.read_bytes()
+    response = client.post(
+        "/video?async=true",
+        data={"file": (io.BytesIO(video_bytes), "short_video.mp4")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 202
+    res = response.get_json()
+    assert res["success"] is True
+    assert res["status"] in ("queued", "processing", "completed")
+    job_id = res["job_id"]
+
+    # Poll status endpoint
+    status_resp = client.get(f"/video/status/{job_id}")
+    assert status_resp.status_code == 200
+    status_json = status_resp.get_json()
+    assert status_json["job_id"] == job_id
+    assert status_json["status"] in ("queued", "processing", "completed")
+
+
+def test_video_status_invalid_or_missing_job_id(client):
+    resp_invalid = client.get("/video/status/../../etc/passwd")
+    assert resp_invalid.status_code in (400, 404)
+
+    resp_missing = client.get("/video/status/00000000000000000000000000000000")
+    assert resp_missing.status_code == 404
+    assert resp_missing.get_json()["code"] == "JOB_NOT_FOUND"
+
+
 def test_download_image_with_job_id(client, sample_image_bytes):
     # First upload an image to generate job_id
     resp_upload = client.post(

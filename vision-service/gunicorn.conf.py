@@ -22,6 +22,25 @@ max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "50"))
 preload_app = False  # Avoid preloading to prevent fork deadlocks in PyTorch/TFLite C++ runtimes
 daemon = False
 
+# CPU Thread Affinity & Oversubscription Prevention for PyTorch / OpenMP / MKL
+os.environ.setdefault("OMP_NUM_THREADS", os.getenv("FOOD_OMP_THREADS", "2"))
+os.environ.setdefault("MKL_NUM_THREADS", os.getenv("FOOD_MKL_THREADS", "2"))
+os.environ.setdefault("OPENBLAS_NUM_THREADS", os.getenv("FOOD_OPENBLAS_THREADS", "2"))
+
+
+def post_fork(server, worker):
+    """Configure per-worker CPU thread limits after fork to prevent CPU thrashing across workers."""
+    try:
+        import cv2
+        cv2.setNumThreads(int(os.getenv("FOOD_OPENCV_THREADS", "2")))
+    except Exception:
+        pass
+    try:
+        import torch
+        torch.set_num_threads(int(os.getenv("FOOD_TORCH_THREADS", "2")))
+    except Exception:
+        pass
+
 # Logging
 loglevel = os.getenv("GUNICORN_LOG_LEVEL", "info")
 accesslog = "-"

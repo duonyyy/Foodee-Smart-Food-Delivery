@@ -1,5 +1,8 @@
+import json
 import re
 import shutil
+import threading
+import time
 import uuid
 from pathlib import Path
 import cv2
@@ -15,6 +18,7 @@ class JobStorageManager:
         self.base_folder = Path(base_folder).resolve()
         self.jobs_dir = self.base_folder / 'jobs'
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
+        self._meta_lock = threading.Lock()
 
     def is_valid_job_id(self, job_id: str | None) -> bool:
         """Verify that job_id contains only safe alphanumeric characters without path traversal."""
@@ -108,3 +112,33 @@ class JobStorageManager:
             return None, download_name
 
         return None, ''
+
+    def get_job_metadata_path(self, job_id: str) -> Path:
+        return self.get_job_dir(job_id) / 'metadata.json'
+
+    def write_job_status(self, job_id: str, status: str, **extra) -> dict:
+        """Persist job processing status and results to disk (safe across Gunicorn workers)."""
+        meta_path = self.get_job_metadata_path(job_id)
+        payload = {
+            'job_id': job_id,
+            'status': status,
+            'updated_at': time.time(),
+            **extra,
+        }
+        with self._meta_lock:
+            meta_path.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+        return payload
+
+    def read_job_status(self, job_id: str) -> dict | None:
+        """Read job processing status and results from disk."""
+        job_dir = self.get_job_dir(job_id)
+        if not job_dir.exists():
+            return None
+        meta_path = job_dir / 'metadata.json'
+        if not meta_path.exists():
+            return None
+        with self._meta_lock:
+            try:
+                return json.loads(meta_path.read_text(encoding='utf-8'))
+            except Exception:
+                return None
