@@ -100,4 +100,72 @@ describe('FoodIntegrationService orderable menu snapshot', () => {
       expect(snapshot?.isAvailable).toBe(false);
     },
   );
+
+  describe('reserveItemsInTransaction - Concurrency & Pessimistic Locking', () => {
+    it('locks and atomically reserves available items within transaction', async () => {
+      const foodEntity = {
+        id: 'food-1',
+        name: 'Bún bò Huế',
+        status: 'available',
+        soldCount: 10,
+        purchasedNumber: 15,
+      };
+
+      const mockFoodRepo = {
+        findOne: jest.fn().mockResolvedValue(foodEntity),
+        save: jest.fn().mockImplementation((val) => Promise.resolve(val)),
+      };
+
+      const mockManager = {
+        getRepository: jest.fn().mockReturnValue(mockFoodRepo),
+      };
+
+      const service = new FoodIntegrationService({} as never, {} as never);
+
+      await service.reserveItemsInTransaction(
+        [{ foodId: 'food-1', quantity: 3, foodName: 'Bún bò Huế' }],
+        mockManager as never,
+      );
+
+      expect(mockFoodRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'food-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(mockFoodRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'food-1',
+          soldCount: 13,
+          purchasedNumber: 18,
+        }),
+      );
+    });
+
+    it('rejects with BadRequestException if any item is unavailable', async () => {
+      const unavailableFood = {
+        id: 'food-2',
+        name: 'Cơm tấm sườn',
+        status: 'unavailable',
+      };
+
+      const mockFoodRepo = {
+        findOne: jest.fn().mockResolvedValue(unavailableFood),
+        save: jest.fn(),
+      };
+
+      const mockManager = {
+        getRepository: jest.fn().mockReturnValue(mockFoodRepo),
+      };
+
+      const service = new FoodIntegrationService({} as never, {} as never);
+
+      await expect(
+        service.reserveItemsInTransaction(
+          [{ foodId: 'food-2', quantity: 1, foodName: 'Cơm tấm sườn' }],
+          mockManager as never,
+        ),
+      ).rejects.toThrow('Food "Cơm tấm sườn" is currently unavailable or sold out');
+
+      expect(mockFoodRepo.save).not.toHaveBeenCalled();
+    });
+  });
 });

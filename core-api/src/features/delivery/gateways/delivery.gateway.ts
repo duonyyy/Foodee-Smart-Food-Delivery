@@ -1,4 +1,5 @@
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger, Optional, UseGuards } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import {
   ConnectedSocket,
   MessageBody,
@@ -9,7 +10,9 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { ShippingDetail } from 'src/entities/shippingDetail.entity';
 import { WsJwtGuard } from 'src/features/auth/public-api';
+import { Repository } from 'typeorm';
 
 export interface ShipperLocationUpdatePayload {
   latitude: number;
@@ -26,6 +29,12 @@ export class DeliveryGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private readonly logger = new Logger(DeliveryGateway.name);
 
+  constructor(
+    @Optional()
+    @InjectRepository(ShippingDetail)
+    private readonly shippingDetailRepository?: Repository<ShippingDetail>,
+  ) {}
+
   handleConnection(client: Socket) {
     this.logger.debug(`Client connected to /delivery: ${client.id}`);
   }
@@ -39,12 +48,23 @@ export class DeliveryGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: Socket,
     @MessageBody() data?: { shipperId?: string },
   ) {
-    const user = client.data?.user as { id?: string } | undefined;
-    const shipperId = data?.shipperId || user?.id;
-    if (!shipperId) {
+    const user = client.data?.user as { id?: string; role?: string } | undefined;
+    if (!user?.id) {
       return { event: 'error', message: 'shipperId is required' };
     }
-    const room = `shipper:${shipperId}`;
+
+    const requestedShipperId = data?.shipperId || user.id;
+    const isAdmin = user.role === 'admin';
+
+    // BOLA/IDOR protection: only admin or the authenticated shipper themselves can subscribe
+    if (!isAdmin && requestedShipperId !== user.id) {
+      return {
+        event: 'error',
+        message: 'Forbidden: You cannot subscribe to another shipper\'s channel',
+      };
+    }
+
+    const room = `shipper:${requestedShipperId}`;
     client.join(room);
     this.logger.debug(`Shipper ${client.id} joined room ${room}`);
     return { event: 'joined', room };
@@ -65,10 +85,46 @@ export class DeliveryGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('trackDelivery')
-  handleTrackDelivery(@ConnectedSocket() client: Socket, @MessageBody() data: { orderId: string }) {
+  async handleTrackDelivery(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { orderId: string },
+  ) {
     if (!data?.orderId) {
       return { event: 'error', message: 'orderId is required' };
     }
+
+    const user = client.data?.user as { id?: string; role?: string } | undefined;
+    if (!user?.id) {
+      return { event: 'error', message: 'Unauthorized: No authenticated user' };
+    }
+
+    if (this.shippingDetailRepository) {
+      const shippingDetail = await this.shippingDetailRepository.findOne({
+        where: { order: { id: data.orderId } },
+        relations: [
+          'shipper',
+          'order',
+          'order.user',
+          'order.restaurant',
+          'order.restaurant.owner',
+        ],
+      });
+
+      if (shippingDetail) {
+        const isAdmin = user.role === 'admin';
+        const isShipper = shippingDetail.shipper?.id === user.id;
+        const isCustomer = shippingDetail.order?.user?.id === user.id;
+        const isRestaurantOwner = shippingDetail.order?.restaurant?.owner?.id === user.id;
+
+        if (!isAdmin && !isShipper && !isCustomer && !isRestaurantOwner) {
+          return {
+            event: 'error',
+            message: 'Forbidden: You do not have permission to track this delivery',
+          };
+        }
+      }
+    }
+
     const room = `order:${data.orderId}`;
     client.join(room);
     this.logger.debug(`Client ${client.id} joined delivery tracking room ${room}`);
@@ -92,8 +148,14 @@ export class DeliveryGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: Socket,
     @MessageBody() data: ShipperLocationUpdatePayload,
   ) {
-    const user = client.data?.user as { id?: string } | undefined;
-    const shipperId = data?.shipperId || user?.id;
+    const user = client.data?.user as { id?: string; role?: string } | undefined;
+    if (!user?.id) {
+      return { event: 'error', message: 'shipperId is required' };
+    }
+
+    const isAdmin = user.role === 'admin';
+    const shipperId = isAdmin && data?.shipperId ? data.shipperId : user.id;
+
     if (!shipperId) {
       return { event: 'error', message: 'shipperId is required' };
     }

@@ -38,6 +38,21 @@ export class PromotionUsageService {
       return existingUsage;
     }
 
+    // Check per-customer limit to prevent reuse or concurrent abuse of the same voucher
+    if (request.customerId) {
+      const customerUsageCount = await usageRepository.count({
+        where: {
+          customerId: request.customerId,
+          promotionCode: request.promotionCode,
+          status: PromotionRedemptionStatus.COMMITTED,
+        },
+      });
+
+      if (customerUsageCount >= 1) {
+        throw new BadRequestException('You have already used this promotion code');
+      }
+    }
+
     const promotion = await this.incrementPromotionUsage(
       request.promotionCode,
       request.subtotal,

@@ -430,6 +430,14 @@ export class OrderCreationService {
         data.paymentMethod && data.paymentMethod !== 'cod' ? 'processing_payment' : 'pending';
 
       const savedOrder = await queryRunner.manager.save(Order, order);
+      await this.menuReader.reserveItemsInTransaction(
+        foodDetails.map((f) => ({
+          foodId: f.foodId,
+          quantity: f.quantity,
+          foodName: f.foodName,
+        })),
+        queryRunner.manager,
+      );
       await this.createOrderDetails(savedOrder, foodDetails, queryRunner);
 
       if (data.promotionCode && orderCalculation.appliedPromotion) {
@@ -518,6 +526,9 @@ export class OrderCreationService {
 
     for (const [index, detail] of orderDetails.entries()) {
       const food = menuItems[index];
+      if (!food.isAvailable) {
+        throw new BadRequestException(`Food "${food.name}" is currently unavailable or sold out`);
+      }
       const quantity = Number(detail.quantity);
       if (isNaN(quantity) || quantity <= 0) {
         throw new BadRequestException(`Invalid quantity for food ID ${detail.foodId}`);

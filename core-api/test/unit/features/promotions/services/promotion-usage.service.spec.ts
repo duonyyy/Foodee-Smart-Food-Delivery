@@ -19,6 +19,7 @@ describe('PromotionUsageService', () => {
     };
     const usageRepository = {
       findOne: jest.fn().mockResolvedValue(null),
+      count: jest.fn().mockResolvedValue(0),
       create: jest.fn((value: unknown) => value),
       save: jest.fn().mockResolvedValue(usage),
     };
@@ -114,5 +115,47 @@ describe('PromotionUsageService', () => {
         manager as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects when a customer has already used this promotion code', async () => {
+    const { service, manager, usageRepository } = createService();
+    usageRepository.count.mockResolvedValue(1);
+
+    await expect(
+      service.useInTransaction(
+        {
+          orderId: 'order-2',
+          promotionCode: 'WELCOME',
+          customerId: 'customer-1',
+          subtotal: 100_000,
+          discountAmount: 10_000,
+        },
+        manager as never,
+      ),
+    ).rejects.toThrow('You have already used this promotion code');
+  });
+
+  it('rejects when promotion maxUsage limit has been reached', async () => {
+    const { service, manager, promotionRepository } = createService();
+    promotionRepository.findOne.mockResolvedValue({
+      id: 'promotion-1',
+      code: 'LIMITED50',
+      numberOfUsed: 50,
+      maxUsage: 50,
+      discountPercent: 10,
+    });
+
+    await expect(
+      service.useInTransaction(
+        {
+          orderId: 'order-2',
+          promotionCode: 'LIMITED50',
+          customerId: 'customer-2',
+          subtotal: 100_000,
+          discountAmount: 10_000,
+        },
+        manager as never,
+      ),
+    ).rejects.toThrow('Promotion usage limit reached');
   });
 });

@@ -306,8 +306,43 @@ export class MomoPaymentGateway implements PaymentGateway, OnModuleInit {
         );
         return false;
       }
-      // For Momo, we need to verify the signature from the webhook
-      // The signature is created using the same method as the request
+      // Check full MoMo v2 IPN signature if v2 fields are present
+      if (payload.transId !== undefined && payload.resultCode !== undefined) {
+        const fullV2Raw =
+          'accessKey=' +
+          this.momoConfig.accessKey +
+          '&amount=' +
+          paymentPayloadString(payload.amount) +
+          '&extraData=' +
+          paymentPayloadString(payload.extraData) +
+          '&message=' +
+          paymentPayloadString(payload.message) +
+          '&orderId=' +
+          paymentPayloadString(payload.orderId) +
+          '&orderInfo=' +
+          paymentPayloadString(payload.orderInfo) +
+          '&orderType=' +
+          paymentPayloadString(payload.orderType) +
+          '&partnerCode=' +
+          paymentPayloadString(payload.partnerCode) +
+          '&payType=' +
+          paymentPayloadString(payload.payType) +
+          '&requestId=' +
+          paymentPayloadString(payload.requestId) +
+          '&responseTime=' +
+          paymentPayloadString(payload.responseTime) +
+          '&resultCode=' +
+          paymentPayloadString(payload.resultCode) +
+          '&transId=' +
+          paymentPayloadString(payload.transId);
+
+        const expectedV2 = this.generateHmacSignature(fullV2Raw, this.momoConfig.secretKey);
+        if (expectedV2 === signature) {
+          return true;
+        }
+      }
+
+      // Simplified signature (used in simplified callbacks / characterization tests)
       const rawSignature =
         'accessKey=' +
         this.momoConfig.accessKey +

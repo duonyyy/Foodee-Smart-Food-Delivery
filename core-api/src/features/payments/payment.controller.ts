@@ -76,11 +76,12 @@ export class PaymentController {
     @Body() payload: PaymentWebhookDto,
     @Headers('x-payment-signature') signature?: string,
   ) {
-    if (!signature) {
+    const effectiveSignature = signature || payload.signature;
+    if (!effectiveSignature) {
       throw new BadRequestException('Missing payment signature');
     }
 
-    return this.paymentService.handleWebhookEvent(payload, signature);
+    return this.paymentService.handleWebhookEvent(payload, effectiveSignature);
   }
 
   @Get('checkout/:checkoutId')

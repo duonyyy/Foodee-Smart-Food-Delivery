@@ -5,10 +5,9 @@ describe('DeliveryGateway', () => {
   let gateway: DeliveryGateway;
   let mockServer: Partial<Server>;
   let mockClient: Partial<Socket>;
+  let mockShippingDetailRepository: { findOne: jest.Mock };
 
   beforeEach(() => {
-    gateway = new DeliveryGateway();
-
     mockServer = {
       to: jest.fn().mockReturnThis(),
       emit: jest.fn(),
@@ -17,16 +16,21 @@ describe('DeliveryGateway', () => {
     mockClient = {
       id: 'shipper-client-socket-1',
       data: {
-        user: { id: 'shipper-123' },
+        user: { id: 'shipper-123', role: 'shipper' },
       },
       join: jest.fn(),
       leave: jest.fn(),
     };
 
+    mockShippingDetailRepository = {
+      findOne: jest.fn(),
+    };
+
+    gateway = new DeliveryGateway(mockShippingDetailRepository as never);
     gateway.server = mockServer as Server;
   });
 
-  describe('channel subscriptions', () => {
+  describe('channel subscriptions - IDOR / BOLA Hardening', () => {
     it('should join shipper channel using authenticated user id', () => {
       const response = gateway.handleJoinShipperChannel(mockClient as Socket);
 
@@ -34,7 +38,21 @@ describe('DeliveryGateway', () => {
       expect(response).toEqual({ event: 'joined', room: 'shipper:shipper-123' });
     });
 
-    it('should join shipper channel with explicit shipperId', () => {
+    it('rejects non-admin attempting to join another shipper\'s channel with explicit shipperId', () => {
+      const response = gateway.handleJoinShipperChannel(mockClient as Socket, {
+        shipperId: 'another-shipper-456',
+      });
+
+      expect(mockClient.join).not.toHaveBeenCalled();
+      expect(response).toEqual({
+        event: 'error',
+        message: 'Forbidden: You cannot subscribe to another shipper\'s channel',
+      });
+    });
+
+    it('allows admin to join another shipper\'s channel with explicit shipperId', () => {
+      mockClient.data = { user: { id: 'admin-1', role: 'admin' } };
+
       const response = gateway.handleJoinShipperChannel(mockClient as Socket, {
         shipperId: 'explicit-shipper-456',
       });
@@ -43,7 +61,7 @@ describe('DeliveryGateway', () => {
       expect(response).toEqual({ event: 'joined', room: 'shipper:explicit-shipper-456' });
     });
 
-    it('should return error if shipperId cannot be resolved', () => {
+    it('should return error if client has no authenticated user', () => {
       const unauthClient = {
         id: 'anon',
         data: {},
@@ -61,14 +79,98 @@ describe('DeliveryGateway', () => {
       expect(mockClient.leave).toHaveBeenCalledWith('shipper:shipper-123');
       expect(response).toEqual({ event: 'left', room: 'shipper:shipper-123' });
     });
+  });
 
-    it('should join order tracking room', () => {
-      const response = gateway.handleTrackDelivery(mockClient as Socket, {
+  describe('trackDelivery - Authorization & Ownership Protection', () => {
+    it('allows assigned shipper to track delivery', async () => {
+      mockShippingDetailRepository.findOne.mockResolvedValue({
+        id: 'sd-1',
+        shipper: { id: 'shipper-123' },
+        order: { id: 'order-999', user: { id: 'customer-1' }, restaurant: { owner: { id: 'owner-1' } } },
+      });
+
+      const response = await gateway.handleTrackDelivery(mockClient as Socket, {
         orderId: 'order-999',
       });
 
       expect(mockClient.join).toHaveBeenCalledWith('order:order-999');
       expect(response).toEqual({ event: 'joined', room: 'order:order-999' });
+    });
+
+    it('allows customer to track delivery', async () => {
+      mockClient.data = { user: { id: 'customer-1', role: 'customer' } };
+      mockShippingDetailRepository.findOne.mockResolvedValue({
+        id: 'sd-1',
+        shipper: { id: 'shipper-123' },
+        order: { id: 'order-999', user: { id: 'customer-1' }, restaurant: { owner: { id: 'owner-1' } } },
+      });
+
+      const response = await gateway.handleTrackDelivery(mockClient as Socket, {
+        orderId: 'order-999',
+      });
+
+      expect(mockClient.join).toHaveBeenCalledWith('order:order-999');
+      expect(response).toEqual({ event: 'joined', room: 'order:order-999' });
+    });
+
+    it('allows restaurant owner to track delivery', async () => {
+      mockClient.data = { user: { id: 'owner-1', role: 'restaurant_owner' } };
+      mockShippingDetailRepository.findOne.mockResolvedValue({
+        id: 'sd-1',
+        shipper: { id: 'shipper-123' },
+        order: { id: 'order-999', user: { id: 'customer-1' }, restaurant: { owner: { id: 'owner-1' } } },
+      });
+
+      const response = await gateway.handleTrackDelivery(mockClient as Socket, {
+        orderId: 'order-999',
+      });
+
+      expect(mockClient.join).toHaveBeenCalledWith('order:order-999');
+      expect(response).toEqual({ event: 'joined', room: 'order:order-999' });
+    });
+
+    it('allows admin to track any delivery', async () => {
+      mockClient.data = { user: { id: 'admin-1', role: 'admin' } };
+      mockShippingDetailRepository.findOne.mockResolvedValue({
+        id: 'sd-1',
+        shipper: { id: 'shipper-other' },
+        order: { id: 'order-999', user: { id: 'cust-other' }, restaurant: { owner: { id: 'own-other' } } },
+      });
+
+      const response = await gateway.handleTrackDelivery(mockClient as Socket, {
+        orderId: 'order-999',
+      });
+
+      expect(mockClient.join).toHaveBeenCalledWith('order:order-999');
+      expect(response).toEqual({ event: 'joined', room: 'order:order-999' });
+    });
+
+    it('rejects third-party user from tracking delivery (IDOR)', async () => {
+      mockClient.data = { user: { id: 'intruder-id', role: 'customer' } };
+      mockShippingDetailRepository.findOne.mockResolvedValue({
+        id: 'sd-1',
+        shipper: { id: 'shipper-123' },
+        order: { id: 'order-999', user: { id: 'customer-1' }, restaurant: { owner: { id: 'owner-1' } } },
+      });
+
+      const response = await gateway.handleTrackDelivery(mockClient as Socket, {
+        orderId: 'order-999',
+      });
+
+      expect(mockClient.join).not.toHaveBeenCalled();
+      expect(response).toEqual({
+        event: 'error',
+        message: 'Forbidden: You do not have permission to track this delivery',
+      });
+    });
+
+    it('returns error when orderId is missing', async () => {
+      const response = await gateway.handleTrackDelivery(
+        mockClient as Socket,
+        {} as { orderId: string },
+      );
+
+      expect(response).toEqual({ event: 'error', message: 'orderId is required' });
     });
 
     it('should leave order tracking room', () => {
@@ -81,8 +183,8 @@ describe('DeliveryGateway', () => {
     });
   });
 
-  describe('updateLocation message', () => {
-    it('should update location and broadcast to rooms', () => {
+  describe('updateLocation message - Spoofing Prevention', () => {
+    it('should update location using authenticated shipper identity and broadcast to rooms', () => {
       const response = gateway.handleUpdateLocation(mockClient as Socket, {
         latitude: 10.7769,
         longitude: 106.7009,
@@ -100,6 +202,25 @@ describe('DeliveryGateway', () => {
           latitude: 10.7769,
           longitude: 106.7009,
           orderId: 'order-999',
+        }),
+      );
+    });
+
+    it('prevents non-admin shipper from spoofing another shipperId in location update', () => {
+      gateway.handleUpdateLocation(mockClient as Socket, {
+        latitude: 10.7769,
+        longitude: 106.7009,
+        orderId: 'order-999',
+        shipperId: 'spoofed-shipper-id',
+      });
+
+      // Must broadcast using authenticated shipper-123, NOT spoofed-shipper-id
+      expect(mockServer.to).toHaveBeenCalledWith('shipper:shipper-123');
+      expect(mockServer.to).not.toHaveBeenCalledWith('shipper:spoofed-shipper-id');
+      expect(mockServer.emit).toHaveBeenCalledWith(
+        'delivery:location_updated',
+        expect.objectContaining({
+          shipperId: 'shipper-123',
         }),
       );
     });

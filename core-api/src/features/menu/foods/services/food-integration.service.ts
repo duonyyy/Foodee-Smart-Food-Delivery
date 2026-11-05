@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Food } from 'src/entities/food.entity';
 import { AppCacheService } from 'src/infra/cache/public-api';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { type CatalogChatFood } from '../../types/catalog-chat.types';
 import { type FoodPreview } from '../../types/food-discovery.types';
 import {
@@ -168,5 +168,30 @@ export class FoodIntegrationService {
         toppings.every((topping) => topping.isAvailable),
       toppings: Object.freeze(toppings),
     });
+  }
+
+  /**
+   * Acquire pessimistic write locks and reserve items within an order transaction.
+   * Throws BadRequestException if any item is not available or sold out.
+   */
+  async reserveItemsInTransaction(
+    items: Array<{ foodId: string; quantity: number; foodName?: string }>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const foodRepo = manager.getRepository(Food);
+    for (const item of items) {
+      const food = await foodRepo.findOne({
+        where: { id: item.foodId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!food || food.status !== 'available') {
+        throw new BadRequestException(
+          `Food "${item.foodName || food?.name || item.foodId}" is currently unavailable or sold out`,
+        );
+      }
+      food.soldCount = Number(food.soldCount || 0) + item.quantity;
+      food.purchasedNumber = Number(food.purchasedNumber || 0) + item.quantity;
+      await foodRepo.save(food);
+    }
   }
 }
