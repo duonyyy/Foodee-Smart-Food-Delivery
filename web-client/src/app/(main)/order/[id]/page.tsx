@@ -1,37 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
-import { useAuth } from "@/context/auth-context";
 import { adminService } from "@/api/admin";
-import {
-  Loader2,
-  ArrowLeft,
-  Package,
-  MapPin,
-  Clock,
-  User,
-  Store,
-  CreditCard,
-  Truck,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  Phone,
-  Star,
-  MessageSquare
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import type { AdminOrderDetail } from "@/api/admin";
+import { userApi } from "@/api/user";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/context/auth-context";
+import { useCart } from "@/context/cart-context";
+import { ConversationType } from "@/interface";
+import { useDeliverySocket, useOrderSocket } from "@/shared/socket";
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  Package,
+  Phone,
+  RotateCcw,
+  Star,
+  Store,
+  Truck,
+  User,
+  XCircle,
+} from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useOrderSocket, useDeliverySocket } from "@/shared/socket";
-// replaced gql with socket.io
-import type { AdminOrderDetail } from "@/api/admin";
-// replaced gql with socket.io
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 // Dynamic imports for modal dialogs and map
 const RatingModal = dynamic(() => import("./_components/rating-modal"), { ssr: false });
@@ -76,6 +80,14 @@ const STATUS_CONFIG = {
     bgColor: "bg-red-500"
   },
 };
+
+const PROGRESS_STEPS = [
+  { key: "pending", label: "Chờ xác nhận", icon: Clock },
+  { key: "confirmed", label: "Đã xác nhận", icon: CheckCircle2 },
+  { key: "shipper_received", label: "Tài xế nhận đơn", icon: Package },
+  { key: "delivering", label: "Đang giao", icon: Truck },
+  { key: "completed", label: "Hoàn thành", icon: CheckCircle2 },
+];
 
 const formatPrice = (price: string | number) => {
   return Number(price).toLocaleString("vi-VN") + "đ";
@@ -138,6 +150,55 @@ export default function OrderDetailPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | undefined>(undefined);
 
   const [shipperLocationData, setShipperLocationData] = useState<{ shipperLocationUpdated: ShipperLocation } | null>(null);
+  const { addToCart } = useCart();
+  const [isReordering, setIsReordering] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
+
+  const handleReorder = async () => {
+    if (!order?.orderDetails || order.orderDetails.length === 0) return;
+    setIsReordering(true);
+    try {
+      for (const item of order.orderDetails) {
+        if (item.food?.id) {
+          await addToCart(item.food.id, item.quantity || 1);
+        }
+      }
+      toast.success(`Đã thêm ${order.orderDetails.length} món vào giỏ hàng!`);
+      router.push("/checkout");
+    } catch (err) {
+      console.error("Failed to reorder:", err);
+      toast.error("Không thể thêm món vào giỏ hàng");
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
+  const handleChatWithShipper = async () => {
+    if (!user) {
+      toast.info("Vui lòng đăng nhập để nhắn tin với tài xế");
+      return;
+    }
+    const token = await getToken();
+    const shipperId = order?.shippingDetail?.shipper?.id;
+    if (!token || !shipperId) {
+      toast.error("Không tìm thấy thông tin tài xế để kết nối");
+      return;
+    }
+    try {
+      setStartingChat(true);
+      await userApi.messenger.createOrGetConversation(token, {
+        participantId: shipperId,
+        orderId: order.id,
+        conversationType: ConversationType.CUSTOMER_SHIPPER,
+      });
+      router.push("/messenger");
+    } catch (err) {
+      console.error("Failed to start chat with shipper:", err);
+      toast.error("Không thể kết nối trò chuyện với tài xế lúc này");
+    } finally {
+      setStartingChat(false);
+    }
+  };
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -230,6 +291,7 @@ export default function OrderDetailPage() {
 
   const statusConfig = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.pending;
   const defaultAddress = order.user.address.find(addr => addr.isDefault) || order.user.address[0];
+  const currentStepIndex = PROGRESS_STEPS.findIndex((s) => s.key === order.status);
 
   // Find shipper info if available
   const shipper = order.shippingDetail?.shipper;
@@ -237,23 +299,43 @@ export default function OrderDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
+      <div className="bg-white border-b sticky top-0 z-10 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" asChild className="rounded-xl hover:bg-slate-100">
+                <Link href="/order" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
+                  <ArrowLeft className="w-4 h-4" />
+                  <span className="font-semibold text-xs sm:text-sm">Đơn hàng của tôi</span>
+                </Link>
+              </Button>
+              <span className="text-gray-300">/</span>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="text-xl sm:text-2xl font-black text-gray-900">
                   Đơn hàng #{order.id.slice(-8).toUpperCase()}
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-xs text-gray-500">
                   Đặt lúc {formatDate(order.createdAt)}
                 </p>
               </div>
             </div>
-            <Badge className={`px-4 py-2 text-sm font-medium border ${statusConfig.color}`}>
-              {statusConfig.icon}
-              <span className="ml-2">{statusConfig.label}</span>
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className={`px-3.5 py-1.5 text-xs font-bold border ${statusConfig.color}`}>
+                {statusConfig.icon}
+                <span className="ml-1.5">{statusConfig.label}</span>
+              </Badge>
+              {(order.status === "completed" || order.status === "canceled") && (
+                <Button
+                  size="sm"
+                  onClick={handleReorder}
+                  disabled={isReordering}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 mr-1.5 ${isReordering ? "animate-spin" : ""}`} />
+                  {isReordering ? "Đang xử lý..." : "Đặt lại đơn này"}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -271,33 +353,77 @@ export default function OrderDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  {Object.entries(STATUS_CONFIG).map(([key, config], index) => {
-                    const isActive = key === order.status;
-                    const isPassed = Object.keys(STATUS_CONFIG).indexOf(order.status) >= index;
+                {order.status === "canceled" ? (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-6 text-center space-y-3">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                      <XCircle className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-lg font-bold text-rose-900">Đơn hàng này đã bị hủy</h3>
+                    <p className="text-sm text-rose-700 max-w-md mx-auto">
+                      Rất tiếc vì sự bất tiện này. Nếu đơn hàng đã được thanh toán trực tuyến, số tiền sẽ được tự động hoàn lại theo chính sách hoàn tiền của Foodee.
+                    </p>
+                    <div className="pt-2 flex flex-wrap justify-center gap-3">
+                      <Button
+                        onClick={handleReorder}
+                        disabled={isReordering}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 mr-1.5 ${isReordering ? "animate-spin" : ""}`} />
+                        {isReordering ? "Đang thêm món..." : "Đặt lại đơn này"}
+                      </Button>
+                      <Button variant="outline" size="sm" asChild className="text-xs font-semibold">
+                        <Link href="/search">Khám phá món khác</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative pt-2 pb-1">
+                    {/* Connecting progress line */}
+                    <div className="absolute top-5 left-8 right-8 h-1 bg-gray-200 -z-0">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-500"
+                        style={{
+                          width: `${(Math.max(0, currentStepIndex) / (PROGRESS_STEPS.length - 1)) * 100}%`,
+                        }}
+                      />
+                    </div>
 
-                    return (
-                      <div key={key} className="flex flex-col items-center flex-1">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${isActive
-                          ? `${config.bgColor} border-transparent text-white`
-                          : isPassed
-                            ? 'bg-emerald-500 border-transparent text-white'
-                            : 'bg-gray-100 border-gray-300 text-gray-400'
-                          }`}>
-                          {config.icon}
-                        </div>
-                        <p className={`text-xs mt-2 text-center ${isActive ? 'text-emerald-600 font-medium' : 'text-gray-500'
-                          }`}>
-                          {config.label}
-                        </p>
-                        {index < Object.keys(STATUS_CONFIG).length - 1 && (
-                          <div className={`h-0.5 w-full mt-5 -ml-full ${isPassed ? 'bg-emerald-500' : 'bg-gray-200'
-                            }`} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                    <div className="flex items-center justify-between relative z-10">
+                      {PROGRESS_STEPS.map((step, index) => {
+                        const StepIcon = step.icon;
+                        const isCurrent = index === currentStepIndex;
+                        const isPassed = currentStepIndex >= 0 && index < currentStepIndex;
+
+                        return (
+                          <div key={step.key} className="flex flex-col items-center flex-1">
+                            <div
+                              className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                                isCurrent
+                                  ? "bg-primary border-primary text-white ring-4 ring-primary/20 shadow-md scale-110"
+                                  : isPassed
+                                  ? "bg-emerald-500 border-emerald-500 text-white shadow-xs"
+                                  : "bg-white border-gray-300 text-gray-400"
+                              }`}
+                            >
+                              <StepIcon className="w-4 h-4" />
+                            </div>
+                            <p
+                              className={`text-xs mt-2 text-center font-medium ${
+                                isCurrent
+                                  ? "text-primary font-bold"
+                                  : isPassed
+                                  ? "text-emerald-700 font-semibold"
+                                  : "text-gray-400"
+                              }`}
+                            >
+                              {step.label}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -438,18 +564,24 @@ export default function OrderDetailPage() {
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex flex-col flex-0 items-end justify-end w-fit ml-auto">
+                              <div className="flex flex-wrap items-center gap-2 ml-auto">
                                 <Button
-                                  className="mt-2"
-                                  variant="outline"
-                                  onClick={() => {
-                                    // Replace this with your chat open logic
-                                    alert(`Open chat with shipper: ${shipper.name}`);
-                                  }}
+                                  size="sm"
+                                  onClick={handleChatWithShipper}
+                                  disabled={startingChat}
+                                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs"
                                 >
-                                  <MessageSquare className="w-4 h-4 mr-2" />
-                                  Nhắn tin với tài xế
+                                  <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+                                  {startingChat ? "Đang kết nối..." : "Nhắn tin với tài xế"}
                                 </Button>
+                                {shipper.phone && (
+                                  <Button size="sm" variant="outline" asChild className="text-xs font-semibold">
+                                    <a href={`tel:${shipper.phone}`}>
+                                      <Phone className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                                      Gọi điện
+                                    </a>
+                                  </Button>
+                                )}
                               </div>
                             </CardContent>
                           </Card>

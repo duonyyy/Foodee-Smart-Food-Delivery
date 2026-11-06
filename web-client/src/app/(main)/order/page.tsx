@@ -1,33 +1,36 @@
 "use client";
 
-import { JSX, useEffect, useState } from "react";
-import Link from "next/link";
-import { useAuth } from "@/context/auth-context";
-import { formatDate, formatPrice } from "@/lib/utils";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-
-import {
-  BadgeCheck,
-  ClockIcon,
-  Package,
-  Truck,
-  XCircle,
-
-  CheckCircle2,
-
-} from "lucide-react";
-import { Order } from "@/interface";
+import { adminService } from "@/api/admin";
+import type { PaginatedResponse } from "@/api/response.interface";
 import { userApi } from "@/api/user";
-import { PaginatedResponse } from "@/api/response.interface";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
-  SelectTrigger,
   SelectContent,
   SelectItem,
+  SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from "@/context/auth-context";
+import { useCart } from "@/context/cart-context";
+import type { Order } from "@/interface";
+import { formatDate, formatPrice } from "@/lib/utils";
+import {
+  BadgeCheck,
+  CheckCircle2,
+  ClockIcon,
+  Package,
+  RotateCcw,
+  Store,
+  Truck,
+  XCircle,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { type JSX, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Chờ xác nhận",
@@ -50,227 +53,35 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const STATUS_ICONS: Record<string, JSX.Element> = {
-  pending: <ClockIcon className="w-4 h-4" />,
-  confirmed: <Package className="w-4 h-4" />,
-  shipper_received: <Truck className="w-4 h-4" />,
-  delivering: <Truck className="w-4 h-4" />,
-  completed: <BadgeCheck className="w-4 h-4" />,
-  canceled: <XCircle className="w-4 h-4" />,
-  processing_payment: <ClockIcon className="w-4 h-4" />,
+  pending: <ClockIcon className="w-3.5 h-3.5" />,
+  confirmed: <Package className="w-3.5 h-3.5" />,
+  shipper_received: <Truck className="w-3.5 h-3.5" />,
+  delivering: <Truck className="w-3.5 h-3.5" />,
+  completed: <BadgeCheck className="w-3.5 h-3.5" />,
+  canceled: <XCircle className="w-3.5 h-3.5" />,
+  processing_payment: <ClockIcon className="w-3.5 h-3.5" />,
 };
 
 const PAGE_SIZE = 5;
 
 const SkeletonCard = () => (
-  <div className="animate-pulse bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4">
-    <div className="flex justify-between items-start mb-4">
+  <div className="animate-pulse bg-white rounded-2xl shadow-xs border border-slate-100 p-6 mb-4 space-y-3">
+    <div className="flex justify-between items-start">
       <div className="space-y-2 flex-1">
-        <div className="h-5 bg-gray-200 rounded w-1/3"></div>
-        <div className="h-3 bg-gray-100 rounded w-1/4"></div>
+        <div className="h-5 bg-slate-200 rounded-lg w-1/3" />
+        <div className="h-3 bg-slate-100 rounded-md w-1/4" />
       </div>
-      <div className="h-6 bg-gray-100 rounded-full w-20"></div>
+      <div className="h-6 bg-slate-100 rounded-full w-24" />
     </div>
-    <div className="h-4 bg-gray-200 rounded w-1/4 mb-3"></div>
-    <div className="flex justify-between items-center">
-      <div className="h-4 bg-gray-100 rounded w-1/5"></div>
-      <div className="h-8 bg-gray-100 rounded w-20"></div>
+    <div className="h-10 bg-slate-50 rounded-xl w-full" />
+    <div className="flex justify-between items-center pt-2">
+      <div className="h-5 bg-slate-200 rounded-md w-28" />
+      <div className="h-8 bg-slate-100 rounded-xl w-20" />
     </div>
   </div>
 );
 
-// const StarRating = ({
-//   rating,
-//   onRatingChange,
-//   readonly = false,
-// }: {
-//   rating: number;
-//   onRatingChange?: (rating: number) => void;
-//   readonly?: boolean;
-// }) => {
-//   return (
-//     <div className="flex gap-1">
-//       {[1, 2, 3, 4, 5].map((star) => (
-//         <button
-//           title="Click to rate"
-//           key={star}
-//           type="button"
-//           disabled={readonly}
-//           onClick={() => !readonly && onRatingChange?.(star)}
-//           className={`transition-colors ${
-//             !readonly ? "hover:scale-110" : ""
-//           }`}
-//         >
-//           <Star
-//             className={`w-6 h-6 ${
-//               star <= rating
-//                 ? "fill-yellow-400 text-yellow-400"
-//                 : "text-gray-300"
-//             }`}
-//           />
-//         </button>
-//       ))}
-//     </div>
-//   );
-// };
-
-// const RatingModal = ({
-//   order,
-//   onSubmit,
-// }: {
-//   order: Order;
-//   onSubmit: (rating: number, comment: string, images: File[]) => void;
-// }) => {
-//   const [rating, setRating] = useState(5);
-//   const [comment, setComment] = useState("");
-//   const [images, setImages] = useState<File[]>([]);
-//   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-//   const [isOpen, setIsOpen] = useState(false);
-
-//   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-//     const files = Array.from(e.target.files || []);
-//     setImages((prev) => [...prev, ...files].slice(0, 3)); // Max 3 images
-
-//     // Create preview URLs
-//     files.forEach((file) => {
-//       const url = URL.createObjectURL(file);
-//       setPreviewUrls((prev) => [...prev, url].slice(0, 3));
-//     });
-//   };
-
-//   const removeImage = (index: number) => {
-//     setImages((prev) => prev.filter((_, i) => i !== index));
-//     setPreviewUrls((prev) => {
-//       const newUrls = prev.filter((_, i) => i !== index);
-//       URL.revokeObjectURL(prev[index]); // Clean up
-//       return newUrls;
-//     });
-//   };
-
-//   const handleSubmit = () => {
-//     onSubmit(rating, comment, images);
-//     setIsOpen(false);
-//     setRating(5);
-//     setComment("");
-//     setImages([]);
-//     setPreviewUrls([]);
-//   };
-
-//   return (
-//     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-//       <DialogTrigger asChild>
-//         <Button
-//           size="sm"
-//           className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white border-0"
-//         >
-//           <Star className="w-4 h-4 mr-1" />
-//           Đánh giá
-//         </Button>
-//       </DialogTrigger>
-//       <DialogContent className="max-w-md mx-auto rounded-2xl">
-//         <DialogHeader>
-//           <DialogTitle className="text-xl font-bold text-center">
-//             Đánh giá đơn hàng
-//           </DialogTitle>
-//         </DialogHeader>
-
-//         <div className="space-y-6 py-4">
-//           {/* Restaurant Info */}
-//           <div className="text-center">
-//             <h3 className="font-semibold text-lg">{order.restaurant?.name}</h3>
-//             <p className="text-gray-500 text-sm">
-//               {formatDate(order.createdAt || "")}
-//             </p>
-//           </div>
-
-//           {/* Rating */}
-//           <div className="text-center space-y-2">
-//             <p className="font-medium">Đánh giá của bạn</p>
-//             <StarRating rating={rating} onRatingChange={setRating} />
-//             <p className="text-sm text-gray-500">
-//               {rating === 1 && "Rất không hài lòng"}
-//               {rating === 2 && "Không hài lòng"}
-//               {rating === 3 && "Bình thường"}
-//               {rating === 4 && "Hài lòng"}
-//               {rating === 5 && "Rất hài lòng"}
-//             </p>
-//           </div>
-
-//           {/* Comment */}
-//           <div className="space-y-2">
-//             <label className="text-sm font-medium">Nhận xét (tùy chọn)</label>
-//             <Textarea
-//               placeholder="Chia sẻ trải nghiệm của bạn về món ăn, dịch vụ..."
-//               value={comment}
-//               onChange={(e) => setComment(e.target.value)}
-//               className="resize-none rounded-xl"
-//               rows={3}
-//             />
-//           </div>
-
-//           {/* Image Upload */}
-//           <div className="space-y-3">
-//             <label className="text-sm font-medium flex items-center gap-2">
-//               <Camera className="w-4 h-4" />
-//               Thêm hình ảnh (tối đa 3 ảnh)
-//             </label>
-
-//             {previewUrls.length > 0 && (
-//               <div className="grid grid-cols-3 gap-2">
-//                 {previewUrls.map((url, index) => (
-//                   <div key={index} className="relative group">
-//                     <Image
-//                       src={url}
-//                       alt={`Preview ${index + 1}`}
-//                       width={80}
-//                       height={80}
-//                       className="w-full h-20 object-cover rounded-lg"
-//                     />
-//                     <button
-//                       onClick={() => removeImage(index)}
-//                       className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-//                     >
-//                       ×
-//                     </button>
-//                   </div>
-//                 ))}
-//               </div>
-//             )}
-
-//             {images.length < 3 && (
-//               <div className="relative">
-//                 <Input
-//                   type="file"
-//                   accept="image/*"
-//                   multiple
-//                   onChange={handleImageChange}
-//                   className="hidden"
-//                   id="image-upload"
-//                 />
-//                 <label
-//                   htmlFor="image-upload"
-//                   className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-primary cursor-pointer transition-colors"
-//                 >
-//                   <ImageIcon className="w-5 h-5 text-gray-400" />
-//                   <span className="text-sm text-gray-500">Chọn ảnh</span>
-//                 </label>
-//               </div>
-//             )}
-//           </div>
-
-//           {/* Submit Button */}
-//           <Button
-//             onClick={handleSubmit}
-//             className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl py-3"
-//           >
-//             Gửi đánh giá
-//           </Button>
-//         </div>
-//       </DialogContent>
-//     </Dialog>
-//   );
-// };
-
-const OrderPage = () => {
+export default function OrderPage() {
   const [tab, setTab] = useState<"current" | "completed" | "history">("current");
   const [currentOrders, setCurrentOrders] = useState<Order[]>([]);
   const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
@@ -279,9 +90,13 @@ const OrderPage = () => {
   const [historyTotalPages, setHistoryTotalPages] = useState(1);
   const [historyStatus, setHistoryStatus] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const { getToken } = useAuth();
+  const [reorderingOrderId, setReorderingOrderId] = useState<string | null>(null);
 
-  // Fetch current orders (not completed/canceled)
+  const { getToken } = useAuth();
+  const { addToCart } = useCart();
+  const router = useRouter();
+
+  // Fetch current orders (pending, confirmed, shipper_received, delivering)
   useEffect(() => {
     if (tab !== "current") return;
     setLoading(true);
@@ -297,8 +112,9 @@ const OrderPage = () => {
         );
       } catch {
         setCurrentOrders([]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchCurrentOrders();
   }, [tab, getToken]);
@@ -319,8 +135,9 @@ const OrderPage = () => {
         );
       } catch {
         setCompletedOrders([]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchCompletedOrders();
   }, [tab, getToken]);
@@ -345,43 +162,150 @@ const OrderPage = () => {
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )
         );
-        
         setHistoryTotalPages(res.totalPages || 1);
       } catch {
         setHistoryOrders([]);
         setHistoryTotalPages(1);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchHistoryOrders();
   }, [tab, historyPage, historyStatus, getToken]);
 
-  // const handleRatingSubmit = async (
-  //   orderId: string,
-  //   rating: number,
-  //   comment: string,
-  //   images: File[]
-  // ) => {
-  //   try {
-  //     const token = await getToken();
-  //     if (!token) return;
+  const handleReorder = async (e: React.MouseEvent, order: Order) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!order.id) return;
+    setReorderingOrderId(order.id);
+    try {
+      const token = await getToken();
+      let itemsToReorder: { foodId?: string; quantity?: number }[] = [];
+      if (order.orderDetails && order.orderDetails.length > 0) {
+        itemsToReorder = order.orderDetails.map((d) => ({
+          foodId: d.food?.id,
+          quantity: d.quantity,
+        }));
+      } else if (token) {
+        const fullOrder = await adminService.Order.getOrderById(token, order.id);
+        itemsToReorder = (fullOrder.orderDetails || []).map((d) => ({
+          foodId: d.food?.id,
+          quantity: d.quantity,
+        }));
+      }
 
-  //     // Here you would typically upload images first and get URLs
-  //     // Then submit the rating with the image URLs
-  //     console.log("Submitting rating:", { orderId, rating, comment, images });
+      if (itemsToReorder.length === 0) {
+        toast.error("Không tìm thấy món ăn trong đơn hàng này");
+        return;
+      }
 
-  //     // Update the order status locally to show it's been rated
-  //     setCompletedOrders((prev) =>
-  //       prev.map((order) =>
-  //         order.id === orderId
-  //           ? { ...order, hasRated: true, userRating: rating }
-  //           : order
-  //       )
-  //     );
-  //   } catch (error) {
-  //     console.error("Error submitting rating:", error);
-  //   }
-  // };
+      let count = 0;
+      for (const item of itemsToReorder) {
+        if (item.foodId) {
+          await addToCart(item.foodId, item.quantity || 1);
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        toast.success(`Đã thêm ${count} món vào giỏ hàng!`);
+        router.push("/checkout");
+      } else {
+        toast.error("Các món trong đơn này hiện không khả dụng");
+      }
+    } catch (err) {
+      console.error("Reorder failed:", err);
+      toast.error("Không thể thêm món vào giỏ hàng");
+    } finally {
+      setReorderingOrderId(null);
+    }
+  };
+
+  const renderOrderCard = (order: Order, allowReorder = false) => {
+    const isReorderingThis = reorderingOrderId === order.id;
+    const itemsPreview =
+      order.orderDetails && order.orderDetails.length > 0
+        ? order.orderDetails
+            .map((d) => `${d.quantity || 1}x ${d.food?.name || "Món ăn"}`)
+            .join(", ")
+        : null;
+
+    return (
+      <Card
+        key={order.id}
+        className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md group"
+      >
+        <CardContent className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+            <div className="flex-1 min-w-[200px]">
+              <div className="flex items-center gap-2">
+                <Store className="w-4 h-4 text-primary shrink-0" />
+                <h3 className="font-extrabold text-base sm:text-lg text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
+                  {order.restaurant?.name || "Nhà hàng đối tác"}
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Đặt lúc: {order.createdAt ? formatDate(order.createdAt) : "Gần đây"} • #{order.id.slice(-6).toUpperCase()}
+              </p>
+            </div>
+
+            <Badge
+              variant="outline"
+              className={`px-3 py-1 rounded-full border text-xs font-bold ${
+                STATUS_COLORS[order.status || "pending"] || "bg-slate-50 text-slate-700"
+              }`}
+            >
+              {STATUS_ICONS[order.status || "pending"]}
+              <span className="ml-1.5">
+                {STATUS_LABELS[order.status || ""] || order.status}
+              </span>
+            </Badge>
+          </div>
+
+          {itemsPreview && (
+            <div className="mb-4 rounded-xl bg-slate-50 px-3.5 py-2 text-xs text-slate-600 line-clamp-2 border border-slate-100">
+              <span className="font-semibold text-slate-800">Món đã đặt: </span>
+              {itemsPreview}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+            <div>
+              <span className="text-[11px] text-slate-500 block font-medium">Tổng tiền</span>
+              <div className="text-base sm:text-lg font-black text-primary">
+                {formatPrice(order.total || 0)}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {allowReorder && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => handleReorder(e, order)}
+                  disabled={isReorderingThis}
+                  className="rounded-xl border-slate-200 text-xs font-bold hover:bg-primary/5 hover:text-primary transition-colors"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 mr-1.5 ${isReorderingThis ? "animate-spin text-primary" : ""}`} />
+                  {isReorderingThis ? "Đang thêm..." : "Đặt lại"}
+                </Button>
+              )}
+
+              <Button
+                asChild
+                size="sm"
+                className="rounded-xl bg-primary px-4 text-xs font-bold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all"
+              >
+                <Link href={`/order/${order.id}`}>
+                  Chi tiết
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const TabButton = ({
     active,
@@ -395,10 +319,11 @@ const OrderPage = () => {
     count?: number;
   }) => (
     <button
-      className={`flex-1 py-4 px-4 text-center font-medium transition-all duration-200 relative ${
+      type="button"
+      className={`flex-1 py-4 px-4 text-center font-bold text-sm transition-all duration-200 relative ${
         active
-          ? "text-emerald-600 bg-white border-b-2 border-emerald-500 shadow-sm"
-          : "text-gray-500 bg-gray-50 hover:bg-gray-100 hover:text-gray-700"
+          ? "text-primary bg-white border-b-2 border-primary shadow-2xs"
+          : "text-slate-500 bg-slate-50/70 hover:bg-slate-100 hover:text-slate-800"
       }`}
       onClick={onClick}
     >
@@ -407,7 +332,7 @@ const OrderPage = () => {
         {count !== undefined && count > 0 && (
           <Badge
             variant="secondary"
-            className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700"
+            className="text-xs px-2 py-0.5 bg-primary/10 text-primary font-bold"
           >
             {count}
           </Badge>
@@ -417,18 +342,20 @@ const OrderPage = () => {
   );
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-8 min-h-screen bg-gray-50">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="max-w-4xl mx-auto p-4 md:p-8 min-h-screen bg-slate-50/50">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200/80 overflow-hidden">
         {/* Header */}
-        <div className="p-6 border-b border-gray-100">
-          <h1 className="text-3xl font-bold text-gray-900">Đơn hàng của tôi</h1>
-          <p className="text-gray-500 mt-2">
-            Quản lý và theo dõi đơn hàng của bạn
+        <div className="p-6 sm:p-8 border-b border-slate-100">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            Đơn hàng của tôi
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Quản lý và theo dõi tiến trình đơn hàng của bạn
           </p>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100">
+        <div className="flex border-b border-slate-100">
           <TabButton
             active={tab === "current"}
             onClick={() => setTab("current")}
@@ -455,7 +382,7 @@ const OrderPage = () => {
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 sm:p-8">
           {/* Current Orders Tab */}
           {tab === "current" && (
             <div className="space-y-4">
@@ -465,62 +392,24 @@ const OrderPage = () => {
                   <SkeletonCard />
                 </>
               ) : currentOrders.length === 0 ? (
-                <div className="text-center text-gray-400 py-16">
-                  <Package className="mx-auto mb-4 w-16 h-16 opacity-30" />
-                  <h3 className="text-lg font-medium mb-2">
-                    Không có đơn hàng đang xử lý
+                <div className="text-center text-slate-400 py-16 space-y-3">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                    <Package className="w-8 h-8 opacity-60" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-700">
+                    Không có đơn hàng nào đang xử lý
                   </h3>
-                  <p className="text-sm">Hãy đặt món ăn yêu thích của bạn</p>
-                  <Button asChild className="mt-4">
-                    <Link href="/search">Khám phá món ăn</Link>
-                  </Button>
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                    Bạn chưa có đơn đặt món nào đang trong quá trình chuẩn bị hoặc giao hàng.
+                  </p>
+                  <div className="pt-2">
+                    <Button asChild className="rounded-xl font-bold bg-primary text-primary-foreground">
+                      <Link href="/search">Khám phá món ăn ngay</Link>
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                currentOrders.map((order) => (
-                  <Link href={`/order/${order.id}`} key={order.id}>
-                    <Card className="rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-emerald-200 transition-all duration-200 cursor-pointer group">
-                      <CardContent className="p-6">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg text-gray-900 group-hover:text-emerald-600 transition-colors">
-                              {order.restaurant?.name}
-                            </h3>
-                            <p className="text-sm text-gray-500 mt-1">
-                              Đặt lúc:{" "}
-                              {order.createdAt
-                                ? formatDate(order.createdAt)
-                                : ""}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`px-3 py-1 rounded-full border ${STATUS_COLORS[
-                              order.status || "pending"
-                            ]}`}
-                          >
-                            {STATUS_ICONS[order.status || "pending"]}
-                            <span className="ml-2">
-                              {STATUS_LABELS[order.status || ""] || order.status}
-                            </span>
-                          </Badge>
-                        </div>
-
-                        <div className="flex justify-between items-center">
-                          <div className="text-lg font-bold text-emerald-600">
-                            {formatPrice(order.total || 0)}
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="group-hover:bg-emerald-50 group-hover:border-emerald-300"
-                          >
-                            Chi tiết
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))
+                currentOrders.map((order) => renderOrderCard(order, false))
               )}
             </div>
           )}
@@ -534,84 +423,19 @@ const OrderPage = () => {
                   <SkeletonCard />
                 </>
               ) : completedOrders.length === 0 ? (
-                <div className="text-center text-gray-400 py-16">
-                  <CheckCircle2 className="mx-auto mb-4 w-16 h-16 opacity-30" />
-                  <h3 className="text-lg font-medium mb-2">
+                <div className="text-center text-slate-400 py-16 space-y-3">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                    <CheckCircle2 className="w-8 h-8 opacity-60" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-700">
                     Chưa có đơn hàng hoàn thành
                   </h3>
-                  <p className="text-sm">
-                    Các đơn hàng đã hoàn thành sẽ xuất hiện ở đây
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                    Các đơn hàng đã giao thành công sẽ hiển thị ở đây để bạn dễ dàng đặt lại.
                   </p>
                 </div>
               ) : (
-                completedOrders.map((order) => (
-                  <Card
-                    key={order.id}
-                    className="rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200"
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex-1">
-                          <h3 className="font-bold text-lg text-gray-900">
-                            {order.restaurant?.name}
-                          </h3>
-                          <p className="text-sm text-gray-500 mt-1">
-                            Hoàn thành:{" "}
-                            {order.createdAt
-                              ? formatDate(order.createdAt)
-                              : ""}
-                          </p>
-                          {/* {order.userRating && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <StarRating rating={order.userRating} readonly />
-                              <span className="text-sm text-gray-500">
-                                Đã đánh giá
-                              </span>
-                            </div>
-                          )} */}
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className="px-3 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span className="ml-2">Hoàn thành</span>
-                        </Badge>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <div className="text-lg font-bold text-emerald-600">
-                          {formatPrice(order.total || 0)}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/order/${order.id}`}>Chi tiết</Link>
-                          </Button>
-                          {/* {!order.hasRated && !order.userRating && (
-                            <RatingModal
-                              order={order}
-                              onSubmit={(rating, comment, images) =>
-                                handleRatingSubmit(
-                                  order.id || "",
-                                  rating,
-                                  comment,
-                                  images
-                                )
-                              }
-                            />
-                          )} */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-emerald-600 hover:bg-emerald-50"
-                          >
-                            Đặt lại
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                completedOrders.map((order) => renderOrderCard(order, true))
               )}
             </div>
           )}
@@ -619,8 +443,8 @@ const OrderPage = () => {
           {/* History Tab */}
           {tab === "history" && (
             <div className="space-y-4">
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                <span className="text-sm font-medium text-gray-700">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="text-xs font-bold text-slate-700">
                   Lọc theo trạng thái:
                 </span>
                 <Select
@@ -631,16 +455,16 @@ const OrderPage = () => {
                   }}
                 >
                   <SelectTrigger
-                    className="w-48 bg-white"
+                    className="w-48 bg-white rounded-xl text-xs font-semibold h-9"
                     aria-label="Lọc theo trạng thái"
                   >
-                    <SelectValue placeholder="Tất cả" />
+                    <SelectValue placeholder="Tất cả trạng thái" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                    <SelectItem value="completed">Hoàn thành</SelectItem>
-                    <SelectItem value="canceled">Đã hủy</SelectItem>
-                    <SelectItem value="processing_payment">
+                    <SelectItem value="all" className="text-xs">Tất cả trạng thái</SelectItem>
+                    <SelectItem value="completed" className="text-xs">Hoàn thành</SelectItem>
+                    <SelectItem value="canceled" className="text-xs">Đã hủy</SelectItem>
+                    <SelectItem value="processing_payment" className="text-xs">
                       Đang xử lý thanh toán
                     </SelectItem>
                   </SelectContent>
@@ -653,67 +477,34 @@ const OrderPage = () => {
                   <SkeletonCard />
                 </>
               ) : historyOrders.length === 0 ? (
-                <div className="text-center text-gray-400 py-16">
-                  <ClockIcon className="mx-auto mb-4 w-16 h-16 opacity-30" />
-                  <h3 className="text-lg font-medium mb-2">Không có đơn hàng</h3>
-                  <p className="text-sm">Chưa có đơn hàng nào với bộ lọc này</p>
+                <div className="text-center text-slate-400 py-16 space-y-3">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                    <ClockIcon className="w-8 h-8 opacity-60" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-700">Không có đơn hàng</h3>
+                  <p className="text-xs text-slate-500">
+                    Không tìm thấy đơn hàng nào phù hợp với bộ lọc đã chọn
+                  </p>
                 </div>
               ) : (
-                historyOrders.map((order) => (
-                  <Link href={`/order/${order.id}`} key={order.id}>
-                    <Card className="rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all duration-200 cursor-pointer">
-                      <CardContent className="p-6">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg text-gray-900">
-                              {order.restaurant?.name}
-                            </h3>
-                            <p className="text-sm text-gray-500 mt-1">
-                              {order.createdAt ? formatDate(order.createdAt) : ""}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`px-3 py-1 rounded-full border ${STATUS_COLORS[
-                              order.status || "pending"
-                            ]}`}
-                          >
-                            {STATUS_ICONS[order.status || "pending"]}
-                            <span className="ml-2">
-                              {STATUS_LABELS[order.status || ""] || order.status}
-                            </span>
-                          </Badge>
-                        </div>
-
-                        <div className="flex justify-between items-center">
-                          <div className="text-lg font-bold text-emerald-600">
-                            {formatPrice(order.total || 0)}
-                          </div>
-                          <Button variant="outline" size="sm">
-                            Chi tiết
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))
+                historyOrders.map((order) => renderOrderCard(order, order.status === "completed" || order.status === "canceled"))
               )}
 
               {/* Pagination */}
               {historyTotalPages > 1 && (
-                <div className="flex justify-center items-center gap-3 pt-6">
+                <div className="flex justify-center items-center gap-3 pt-6 border-t border-slate-100">
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={historyPage <= 1}
                     onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                    className="px-4"
+                    className="rounded-xl px-4 text-xs font-bold"
                   >
                     Trước
                   </Button>
-                  <span className="text-sm text-gray-600 bg-gray-50 px-4 py-2 rounded-lg">
+                  <span className="text-xs font-medium text-slate-600 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
                     Trang{" "}
-                    <span className="font-semibold">{historyPage}</span> /{" "}
+                    <span className="font-extrabold text-slate-900">{historyPage}</span> /{" "}
                     {historyTotalPages}
                   </span>
                   <Button
@@ -721,7 +512,7 @@ const OrderPage = () => {
                     size="sm"
                     disabled={historyPage >= historyTotalPages}
                     onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-                    className="px-4"
+                    className="rounded-xl px-4 text-xs font-bold"
                   >
                     Sau
                   </Button>
@@ -733,6 +524,4 @@ const OrderPage = () => {
       </div>
     </div>
   );
-};
-
-export default OrderPage;
+}
