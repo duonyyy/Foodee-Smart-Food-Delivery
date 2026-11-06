@@ -1,6 +1,9 @@
 import Image from "next/image";
+import AddressPicker, { type AddressItem } from "./AddressPicker";
 import ChatFoodCard from "./FoodCard";
 import OrderCard from "./OrderCard";
+import OrderSuccessCard from "./OrderSuccessCard";
+import PaymentSelector from "./PaymentSelector";
 import type { ChatMessageModel, ChatMetadata, FoodSuggestion } from "./types";
 
 interface ChatMessageProps {
@@ -33,6 +36,21 @@ export default function ChatMessage({
     metadata.isQuickReorder &&
     Array.isArray(metadata.quickOrderOptions) &&
     metadata.quickOrderOptions.length > 0;
+
+  const showAddressPicker =
+    !isUser &&
+    message.action === "chooseAddress" &&
+    Array.isArray(metadata.addresses) &&
+    metadata.addresses.length > 0;
+
+  const showPaymentSelector =
+    !isUser && message.action === "choosePayment";
+
+  const showOrderSuccess =
+    !isUser &&
+    (message.action === "placeOrder" ||
+      (Boolean(metadata.orderId) &&
+        message.text?.includes("tạo thành công")));
 
   return (
     <div
@@ -87,6 +105,40 @@ export default function ChatMessage({
               />
             ))}
           </div>
+        )}
+
+        {showAddressPicker && (
+          <AddressPicker
+            addresses={metadata.addresses as AddressItem[]}
+            selectedId={
+              typeof metadata.selectedAddress === "object" &&
+              metadata.selectedAddress !== null &&
+              "id" in metadata.selectedAddress
+                ? String(metadata.selectedAddress.id)
+                : undefined
+            }
+            onSelect={(index) => onSelectOrder(String(index + 1))}
+          />
+        )}
+
+        {showPaymentSelector && (
+          <PaymentSelector
+            selectedMethod={
+              metadata.selectedPaymentMethod === "cod" ||
+              metadata.selectedPaymentMethod === "card"
+                ? metadata.selectedPaymentMethod
+                : undefined
+            }
+            onSelect={(method) => onSelectOrder(method)}
+          />
+        )}
+
+        {showOrderSuccess && metadata.orderId && (
+          <OrderSuccessCard
+            orderId={String(metadata.orderId)}
+            total={typeof metadata.total === "number" ? metadata.total : undefined}
+            onContinueChat={() => onSelectOrder("Cảm ơn bot")}
+          />
         )}
 
         {showQuickReorder && (

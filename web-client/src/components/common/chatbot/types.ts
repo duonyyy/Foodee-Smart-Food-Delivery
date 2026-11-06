@@ -36,6 +36,16 @@ export interface ChatMetadata {
   isRestaurantConfirmed: boolean;
   isAddressConfirmed: boolean;
   isPaymentConfirmed: boolean;
+  selectedPaymentMethod?: "cod" | "card";
+  selectedAddress?: {
+    id: string;
+    street: string;
+    ward: string | null;
+    district: string | null;
+    city: string;
+  };
+  orderId?: string;
+  total?: number;
   isQuickReorder?: boolean;
   quickOrderOptions?: OrderPreview[];
 }
