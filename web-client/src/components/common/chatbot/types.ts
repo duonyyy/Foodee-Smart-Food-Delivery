@@ -26,6 +26,8 @@ export interface ChatMessageModel {
   foodCards?: FoodSuggestion[];
   action?: string;
   createdAt: Date;
+  isError?: boolean;
+  retryPayload?: string;
 }
 
 export interface ChatMetadata {

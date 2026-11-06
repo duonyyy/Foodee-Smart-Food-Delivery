@@ -220,54 +220,185 @@ export default function ChatWidget() {
           text: m.text,
         }));
 
-        const res = await fetch(`${apiBase}/chat`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            userMessage: messageToSend,
-            metadata,
-            history,
-          }),
-        });
+        let streamedSuccessfully = false;
+        let streamPlaceholderId: string | null = null;
 
-        if (!res.ok) {
-          const error = (await res.json()) as { message?: string };
-          throw new Error(error.message || "Lỗi không xác định từ server");
+        // 1. Try streaming response via SSE for sub-300ms perceived latency
+        try {
+          const streamRes = await fetch(`${apiBase}/chat/stream`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              userMessage: messageToSend,
+              metadata,
+              history,
+            }),
+          });
+
+          if (streamRes.ok && streamRes.body) {
+            streamPlaceholderId = createMessage("bot", { text: "" }).id;
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: streamPlaceholderId!,
+                from: "bot",
+                text: "",
+                createdAt: new Date(),
+              },
+            ]);
+
+            const reader = streamRes.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+            let finalData: ChatApiResponse | null = null;
+            let accumulatedText = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n\n");
+              buffer = lines.pop() || "";
+
+              for (const block of lines) {
+                const trimmed = block.trim();
+                if (!trimmed.startsWith("data:")) continue;
+                const jsonStr = trimmed.replace(/^data:\s*/, "");
+                try {
+                  const payload = JSON.parse(jsonStr);
+                  if (payload.event === "delta" && typeof payload.text === "string") {
+                    accumulatedText += payload.text;
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === streamPlaceholderId ? { ...m, text: accumulatedText } : m,
+                      ),
+                    );
+                  } else if (payload.event === "done" && payload.data) {
+                    finalData = payload.data as ChatApiResponse;
+                  }
+                } catch {
+                  // Ignore JSON parse error on partial chunks
+                }
+              }
+            }
+
+            if (finalData) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamPlaceholderId
+                    ? {
+                        ...m,
+                        text: getReplyText(finalData!) || accumulatedText,
+                        foodCards: getSuggestions(finalData!),
+                        action: getAction(finalData!),
+                      }
+                    : m,
+                ),
+              );
+
+              setMetadata((prev) => ({
+                ...prev,
+                isOrdering: finalData?.metadata?.isOrdering ?? prev.isOrdering,
+                isFoodConfirmed:
+                  finalData?.metadata?.isFoodConfirmed ?? prev.isFoodConfirmed,
+                isRestaurantConfirmed:
+                  finalData?.metadata?.isRestaurantConfirmed ??
+                  prev.isRestaurantConfirmed,
+                isAddressConfirmed:
+                  finalData?.metadata?.isAddressConfirmed ?? prev.isAddressConfirmed,
+                isPaymentConfirmed:
+                  finalData?.metadata?.isPaymentConfirmed ?? prev.isPaymentConfirmed,
+                selectedPaymentMethod:
+                  finalData?.metadata?.selectedPaymentMethod ??
+                  prev.selectedPaymentMethod,
+                selectedAddress:
+                  finalData?.metadata?.selectedAddress ?? prev.selectedAddress,
+                orderId: finalData?.metadata?.orderId ?? prev.orderId,
+                total: finalData?.metadata?.total ?? prev.total,
+                orderItems:
+                  (finalData?.metadata?.orderItems as unknown[]) ?? prev.orderItems,
+                addresses:
+                  (finalData?.metadata?.addresses as unknown[]) ?? prev.addresses,
+                quickOrderOptions:
+                  finalData?.metadata?.quickOrderOptions ??
+                  prev.quickOrderOptions,
+                isQuickReorder:
+                  finalData?.metadata?.isQuickReorder ?? prev.isQuickReorder,
+              }));
+
+              if (!isMuted) {
+                receiveSound?.play().catch(() => {});
+              }
+              streamedSuccessfully = true;
+            }
+          }
+        } catch {
+          // Stream error - proceed to standard endpoint fallback
+          streamedSuccessfully = false;
         }
 
-        const data = (await res.json()) as ChatApiResponse;
+        // 2. Fallback to standard /chat endpoint if stream did not complete
+        if (!streamedSuccessfully) {
+          if (streamPlaceholderId) {
+            setMessages((prev) => prev.filter((m) => m.id !== streamPlaceholderId));
+          }
 
-        setMessages((prev) => [
-          ...prev,
-          createMessage("bot", {
-            text: getReplyText(data),
-            foodCards: getSuggestions(data),
-            action: getAction(data),
-          }),
-        ]);
+          const res = await fetch(`${apiBase}/chat`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              userMessage: messageToSend,
+              metadata,
+              history,
+            }),
+          });
 
-        setMetadata((prev) => ({
-          ...prev,
-          isOrdering: data.metadata?.isOrdering ?? prev.isOrdering,
-          isFoodConfirmed:
-            data.metadata?.isFoodConfirmed ?? prev.isFoodConfirmed,
-          isRestaurantConfirmed:
-            data.metadata?.isRestaurantConfirmed ??
-            prev.isRestaurantConfirmed,
-          isAddressConfirmed:
-            data.metadata?.isAddressConfirmed ?? prev.isAddressConfirmed,
-          isPaymentConfirmed:
-            data.metadata?.isPaymentConfirmed ?? prev.isPaymentConfirmed,
-          orderItems: (data.metadata?.orderItems as unknown[]) ?? prev.orderItems,
-          addresses: (data.metadata?.addresses as unknown[]) ?? prev.addresses,
-          quickOrderOptions:
-            data.metadata?.quickOrderOptions ?? prev.quickOrderOptions,
-          isQuickReorder:
-            data.metadata?.isQuickReorder ?? prev.isQuickReorder,
-        }));
+          if (!res.ok) {
+            const error = (await res.json()) as { message?: string };
+            throw new Error(error.message || "Lỗi không xác định từ server");
+          }
 
-        if (!isMuted) {
-          receiveSound?.play().catch(() => {});
+          const data = (await res.json()) as ChatApiResponse;
+
+          setMessages((prev) => [
+            ...prev,
+            createMessage("bot", {
+              text: getReplyText(data),
+              foodCards: getSuggestions(data),
+              action: getAction(data),
+            }),
+          ]);
+
+          setMetadata((prev) => ({
+            ...prev,
+            isOrdering: data.metadata?.isOrdering ?? prev.isOrdering,
+            isFoodConfirmed:
+              data.metadata?.isFoodConfirmed ?? prev.isFoodConfirmed,
+            isRestaurantConfirmed:
+              data.metadata?.isRestaurantConfirmed ??
+              prev.isRestaurantConfirmed,
+            isAddressConfirmed:
+              data.metadata?.isAddressConfirmed ?? prev.isAddressConfirmed,
+            isPaymentConfirmed:
+              data.metadata?.isPaymentConfirmed ?? prev.isPaymentConfirmed,
+            selectedPaymentMethod:
+              data.metadata?.selectedPaymentMethod ??
+              prev.selectedPaymentMethod,
+            selectedAddress:
+              data.metadata?.selectedAddress ?? prev.selectedAddress,
+            orderId: data.metadata?.orderId ?? prev.orderId,
+            total: data.metadata?.total ?? prev.total,
+            orderItems: (data.metadata?.orderItems as unknown[]) ?? prev.orderItems,
+            addresses: (data.metadata?.addresses as unknown[]) ?? prev.addresses,
+            quickOrderOptions:
+              data.metadata?.quickOrderOptions ?? prev.quickOrderOptions,
+            isQuickReorder:
+              data.metadata?.isQuickReorder ?? prev.isQuickReorder,
+          }));
+
+          if (!isMuted) {
+            receiveSound?.play().catch(() => {});
+          }
         }
       } catch (err) {
         console.error("[BOT ERROR]", err);
@@ -276,13 +407,18 @@ export default function ChatWidget() {
           err.message &&
           !err.message.includes("Token không tồn tại")
             ? err.message
-            : "Xin lỗi, hệ thống AI đang bận một chút. Bạn thử lại sau vài giây nhé!";
+            : "Xin lỗi, hệ thống AI đang bận một chút. Bạn bấm nút thử lại giúp mình nhé!";
 
         setMessages((prev) => [
           ...prev,
-          createMessage("bot", {
+          {
+            id: createMessage("bot", { text: errorText }).id,
+            from: "bot",
             text: errorText,
-          }),
+            createdAt: new Date(),
+            isError: true,
+            retryPayload: messageToSend,
+          },
         ]);
       } finally {
         setIsTyping(false);
@@ -354,6 +490,7 @@ export default function ChatWidget() {
                     onRequireAuth={() => openModal("login")}
                     onOrderDirect={handleOrderDirect}
                     onAddToCart={handleAddToCart}
+                    onRetry={(payload) => sendMessage(payload)}
                   />
                 ))
               )}

@@ -1,7 +1,9 @@
+import { RefreshCw } from "lucide-react";
 import Image from "next/image";
 import AddressPicker, { type AddressItem } from "./AddressPicker";
 import ChatFoodCard from "./FoodCard";
 import OrderCard from "./OrderCard";
+import OrderReceiptCard from "./OrderReceiptCard";
 import OrderSuccessCard from "./OrderSuccessCard";
 import PaymentSelector from "./PaymentSelector";
 import type { ChatMessageModel, ChatMetadata, FoodSuggestion } from "./types";
@@ -13,6 +15,7 @@ interface ChatMessageProps {
   onRequireAuth?: () => void;
   onOrderDirect?: (foodName: string) => void;
   onAddToCart?: (food: FoodSuggestion) => void;
+  onRetry?: (payload: string) => void;
 }
 
 const formatTime = (date: Date) =>
@@ -21,6 +24,28 @@ const formatTime = (date: Date) =>
     minute: "2-digit",
   }).format(date);
 
+const renderFormattedText = (content: string, isUserMessage: boolean) => {
+  if (!content) return null;
+  const parts = content.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+      return (
+        <strong
+          key={index}
+          className={
+            isUserMessage
+              ? "font-bold text-white underline decoration-white/30"
+              : "font-bold text-slate-900"
+          }
+        >
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+};
+
 export default function ChatMessage({
   message,
   metadata,
@@ -28,6 +53,7 @@ export default function ChatMessage({
   onRequireAuth,
   onOrderDirect,
   onAddToCart,
+  onRetry,
 }: ChatMessageProps) {
   const isUser = message.from === "user";
   const showQuickReorder =
@@ -45,6 +71,12 @@ export default function ChatMessage({
 
   const showPaymentSelector =
     !isUser && message.action === "choosePayment";
+
+  const showOrderReceipt =
+    !isUser &&
+    message.action === "confirmCreateOrder" &&
+    Array.isArray(metadata.orderItems) &&
+    metadata.orderItems.length > 0;
 
   const showOrderSuccess =
     !isUser &&
@@ -76,11 +108,24 @@ export default function ChatMessage({
             className={`whitespace-pre-wrap break-words px-4 py-3 text-sm leading-6 shadow-xs ${
               isUser
                 ? "rounded-2xl rounded-br-md bg-primary text-primary-foreground font-medium"
-                : "rounded-2xl rounded-bl-md bg-slate-100 text-slate-800"
+                : message.isError
+                  ? "rounded-2xl rounded-bl-md border border-rose-200 bg-rose-50 text-rose-800"
+                  : "rounded-2xl rounded-bl-md bg-slate-100 text-slate-800"
             }`}
           >
-            {message.text}
+            {renderFormattedText(message.text, isUser)}
           </div>
+        )}
+
+        {message.isError && onRetry && (
+          <button
+            type="button"
+            onClick={() => onRetry(message.retryPayload || "")}
+            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors shadow-xs active:scale-95"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Thử lại tin nhắn này</span>
+          </button>
         )}
 
         {!isUser && message.action === "requireAuth" && onRequireAuth && (
@@ -130,6 +175,14 @@ export default function ChatMessage({
                 : undefined
             }
             onSelect={(method) => onSelectOrder(method)}
+          />
+        )}
+
+        {showOrderReceipt && (
+          <OrderReceiptCard
+            metadata={metadata}
+            onConfirm={() => onSelectOrder("có")}
+            onCancel={() => onSelectOrder("hủy")}
           />
         )}
 
