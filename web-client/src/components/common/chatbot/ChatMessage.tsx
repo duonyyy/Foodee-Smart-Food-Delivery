@@ -1,13 +1,15 @@
 import Image from "next/image";
 import ChatFoodCard from "./FoodCard";
 import OrderCard from "./OrderCard";
-import type { ChatMessageModel, ChatMetadata } from "./types";
+import type { ChatMessageModel, ChatMetadata, FoodSuggestion } from "./types";
 
 interface ChatMessageProps {
   message: ChatMessageModel;
   metadata: ChatMetadata;
   onSelectOrder: (message: string) => void;
   onRequireAuth?: () => void;
+  onOrderDirect?: (foodName: string) => void;
+  onAddToCart?: (food: FoodSuggestion) => void;
 }
 
 const formatTime = (date: Date) =>
@@ -21,6 +23,8 @@ export default function ChatMessage({
   metadata,
   onSelectOrder,
   onRequireAuth,
+  onOrderDirect,
+  onAddToCart,
 }: ChatMessageProps) {
   const isUser = message.from === "user";
   const showQuickReorder =
@@ -48,12 +52,12 @@ export default function ChatMessage({
         </div>
       )}
 
-      <div className={`max-w-[82%] space-y-2 ${isUser ? "items-end" : ""}`}>
+      <div className={`max-w-[85%] space-y-2 ${isUser ? "items-end" : ""}`}>
         {message.text && (
           <div
-            className={`whitespace-pre-wrap break-words px-4 py-3 text-sm leading-6 shadow-sm ${
+            className={`whitespace-pre-wrap break-words px-4 py-3 text-sm leading-6 shadow-xs ${
               isUser
-                ? "rounded-2xl rounded-br-md bg-primary text-primary-foreground"
+                ? "rounded-2xl rounded-br-md bg-primary text-primary-foreground font-medium"
                 : "rounded-2xl rounded-bl-md bg-slate-100 text-slate-800"
             }`}
           >
@@ -75,7 +79,12 @@ export default function ChatMessage({
         {!isUser && message.foodCards && message.foodCards.length > 0 && (
           <div className="grid gap-2">
             {message.foodCards.map((food) => (
-              <ChatFoodCard key={food.id} food={food} />
+              <ChatFoodCard
+                key={food.id}
+                food={food}
+                onOrderDirect={onOrderDirect}
+                onAddToCart={onAddToCart}
+              />
             ))}
           </div>
         )}
