@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     chat_cache_ttl_seconds: int = 300
     chat_cache_max_entries: int = 512
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache

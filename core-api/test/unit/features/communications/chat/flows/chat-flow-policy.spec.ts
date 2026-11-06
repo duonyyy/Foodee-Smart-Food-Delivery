@@ -143,4 +143,75 @@ describe('Chat flow policy', () => {
       items: [{ foodId: 'food-1', quantity: 2 }],
     });
   });
+
+  it('recognizes natural ordering intent and contextual confirmations in isStartRequest', () => {
+    const service = new OrderConversationFlowService(
+      { listOwnedAddresses: jest.fn() } as never,
+      { createChatOrder: jest.fn() } as never,
+      { validate: jest.fn() } as never,
+      { parseOrderItems: jest.fn() } as never,
+    );
+
+    expect(service.isStartRequest('đặt món')).toBe(true);
+    expect(service.isStartRequest('TÔI MUỐN ĐẶT Cơm Tấm Sườn Nướng có giá 65.000đ')).toBe(true);
+    expect(service.isStartRequest('cho mình đặt 1 phần gà rán')).toBe(true);
+    expect(service.isStartRequest('cho 1 ly trà đào')).toBe(true);
+    expect(service.isStartRequest('order giúp mình món này')).toBe(true);
+
+    // Bare "có" without history is NOT an order start
+    expect(service.isStartRequest('có')).toBe(false);
+
+    // "có" with order recommendation in history IS an order start
+    const history = [
+      { role: 'user' as const, text: 'Có cơm sườn không' },
+      {
+        role: 'bot' as const,
+        text: 'Dạ, Cơm Tấm Sườn Nướng có giá 65.000đ. Bạn có muốn đặt món này không?',
+      },
+    ];
+    expect(service.isStartRequest('CÓ', history)).toBe(true);
+    expect(service.isStartRequest('ok', history)).toBe(true);
+    expect(service.isStartRequest('không', history)).toBe(false);
+  });
+
+  it('immediately parses items on start when user specifies food in message or agrees via history', async () => {
+    const parsedItem = {
+      id: 'food-1',
+      name: 'Cơm Tấm Sườn Nướng',
+      quantity: 1,
+      price: 65000,
+      restaurantId: 'rest-1',
+      restaurantName: 'Quán Cơm Tấm',
+    };
+    const parser = {
+      parseOrderItems: jest.fn().mockResolvedValue([parsedItem]),
+    };
+    const service = new OrderConversationFlowService(
+      { listOwnedAddresses: jest.fn() } as never,
+      { createChatOrder: jest.fn() } as never,
+      { validate: jest.fn() } as never,
+      parser as never,
+    );
+    const metadata = createInitialChatMetadata();
+    const history = [
+      { role: 'user' as const, text: 'Có cơm sườn không' },
+      {
+        role: 'bot' as const,
+        text: 'Dạ có Cơm Tấm Sườn Nướng giá 65.000đ. Bạn có muốn đặt món này không?',
+      },
+    ];
+
+    const reply = await service.start(
+      'TÔI MUỐN ĐẶT Cơm Tấm Sườn Nướng có giá 65.000đ',
+      'customer-1',
+      metadata,
+      context,
+      history,
+    );
+
+    expect(reply.action).toBe('confirmOrder');
+    expect(reply.reply).toContain('1 Cơm Tấm Sườn Nướng');
+    expect(metadata.isOrdering).toBe(true);
+    expect(metadata.orderItems).toHaveLength(1);
+  });
 });

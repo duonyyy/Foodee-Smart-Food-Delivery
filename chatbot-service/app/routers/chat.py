@@ -39,7 +39,7 @@ async def general_reply(request: GeneralReplyRequest):
     """
     try:
         prompt = _prompt_service.build_general_reply_prompt(
-            request.userMessage, request.menuFlat
+            request.userMessage, request.menuFlat, request.history
         )
         cache_key = _cache.build_key("general_reply", prompt)
         cached = await _cache.get(cache_key)
@@ -71,7 +71,7 @@ async def general_reply(request: GeneralReplyRequest):
 async def general_reply_stream(request: GeneralReplyRequest):
     """Stream general chat reply via Server-Sent Events (SSE) for sub-second First Token Time (FTT)."""
     prompt = _prompt_service.build_general_reply_prompt(
-        request.userMessage, request.menuFlat
+        request.userMessage, request.menuFlat, request.history
     )
     cache_key = _cache.build_key("general_reply", prompt)
 
@@ -120,7 +120,7 @@ async def parse_order_items(request: ParseOrderItemsRequest):
     """
     try:
         prompt = _prompt_service.build_order_items_prompt(
-            request.userMessage, request.menuFlat
+            request.userMessage, request.menuFlat, request.history
         )
         cache_key = _cache.build_key("parse_order_items", prompt)
         cached = await _cache.get(cache_key)

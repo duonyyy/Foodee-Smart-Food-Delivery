@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "ux-heuristics-audit": {
+      "source": "uxcel-lab/product-skills",
+      "sourceType": "github",
+      "skillPath": "ux/audits/heuristics/SKILL.md",
+      "computedHash": "e659825639ccbfacd5d3858cd5c5511477e19abcd1a140b02e97834997ad7c49"
+    }
+  }
+}

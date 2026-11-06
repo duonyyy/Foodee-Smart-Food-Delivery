@@ -210,3 +210,22 @@ def test_models_registry_and_endpoint():
     assert h_res.status_code == 200
     assert "active_model" in h_res.json()
 
+
+def test_prompt_service_with_history():
+    from app.models.chat_request import ChatHistoryItem
+    menu = menu_fixture()
+    history = [
+        ChatHistoryItem(role="user", text="Có cơm sườn không"),
+        ChatHistoryItem(role="bot", text="Dạ có Cơm Tấm Sườn Nướng giá 65.000đ. Bạn có muốn đặt món này không?"),
+    ]
+    general_prompt = PromptService.build_general_reply_prompt("Có", menu, history)
+    assert "Lịch sử trò chuyện gần nhất:" in general_prompt
+    assert "Có cơm sườn không" in general_prompt
+    assert 'Khách nói: "Có"' in general_prompt
+    assert "TUYỆT ĐỐI KHÔNG tự bịa hoặc chèn các đường dẫn URL" in general_prompt
+
+    order_prompt = PromptService.build_order_items_prompt("Có", menu, history)
+    assert "Lịch sử trò chuyện gần nhất:" in order_prompt
+    assert "đồng ý với câu hỏi gợi ý" in order_prompt
+
+

@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { createHash } from 'node:crypto';
 import { AppCacheService } from 'src/infra/cache/public-api';
-import { ChatMenuItem, ChatOrderItem, ChatReply } from '../types/chat.types';
+import { ChatHistoryItem, ChatMenuItem, ChatOrderItem, ChatReply } from '../types/chat.types';
 
 const CHAT_LLM_CACHE_TTL_SECONDS = 300;
 
@@ -46,16 +46,26 @@ export class ChatLlmService {
     this.aiServiceToken = token;
   }
 
-  private buildChatCacheKey(namespace: string, userMessage: string, menuFlat: ChatMenuItem[]): string {
+  private buildChatCacheKey(
+    namespace: string,
+    userMessage: string,
+    menuFlat: ChatMenuItem[],
+    history?: ChatHistoryItem[],
+  ): string {
     const menuDigest = menuFlat.map((item) => `${item.id}:${item.price}`).join('|');
+    const historyDigest = (history || []).map((h) => `${h.role}:${h.text}`).join('|');
     const hash = createHash('sha256')
-      .update(`${userMessage.trim().toLowerCase()}::${menuDigest}`)
+      .update(`${userMessage.trim().toLowerCase()}::${historyDigest}::${menuDigest}`)
       .digest('hex');
     return `food:chat:${namespace}:${hash}`;
   }
 
-  async getGeneralReply(userMessage: string, menuFlat: ChatMenuItem[]): Promise<ChatReply> {
-    const cacheKey = this.buildChatCacheKey('general', userMessage, menuFlat);
+  async getGeneralReply(
+    userMessage: string,
+    menuFlat: ChatMenuItem[],
+    history?: ChatHistoryItem[],
+  ): Promise<ChatReply> {
+    const cacheKey = this.buildChatCacheKey('general', userMessage, menuFlat, history);
     if (this.cacheService) {
       const cached = await this.cacheService.get<ChatReply>(cacheKey);
       if (cached) {
@@ -66,7 +76,7 @@ export class ChatLlmService {
     try {
       const response = await axios.post<ChatReply>(
         `${this.getAiServerUrl()}/api/chat/general-reply`,
-        { userMessage, menuFlat },
+        { userMessage, menuFlat, history },
         {
           headers: {
             'Content-Type': 'application/json',
@@ -102,11 +112,12 @@ export class ChatLlmService {
   async parseOrderItems(
     userMessage: string,
     menuFlat: ChatMenuItem[],
+    history?: ChatHistoryItem[],
   ): Promise<ChatOrderItem[] | null> {
     try {
       const response = await axios.post<ParseOrderItemsResponse>(
         `${this.getAiServerUrl()}/api/chat/parse-order-items`,
-        { userMessage, menuFlat },
+        { userMessage, menuFlat, history },
         {
           headers: {
             'Content-Type': 'application/json',

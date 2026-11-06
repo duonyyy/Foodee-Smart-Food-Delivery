@@ -134,6 +134,10 @@ export default function ChatWidget() {
         }
 
         const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/$/, '');
+        const history = messages.slice(-8).map((m) => ({
+          role: m.from === "user" ? ("user" as const) : ("bot" as const),
+          text: m.text,
+        }));
         const res = await fetch(
           `${apiBase}/chat`,
           {
@@ -142,6 +146,7 @@ export default function ChatWidget() {
             body: JSON.stringify({
               userMessage: messageToSend,
               metadata,
+              history,
             }),
           },
         );
@@ -205,7 +210,7 @@ export default function ChatWidget() {
           setIsTyping(false);
         }
       },
-      [getToken, input, isTyping, metadata],
+      [getToken, input, isTyping, metadata, messages],
     );
 
     return (

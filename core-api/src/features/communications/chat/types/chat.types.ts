@@ -6,6 +6,8 @@ export interface ChatSuggestion {
   price: number;
   image: string;
   link: string;
+  restaurantId?: string;
+  restaurantName?: string;
 }
 
 export interface ChatReply {
@@ -68,7 +70,13 @@ export interface ChatAddress {
   city: string;
 }
 
+export interface ChatHistoryItem {
+  role: 'user' | 'bot';
+  text: string;
+}
+
 export interface ChatContext {
   menuFlat: ChatMenuItem[];
   orderedFoods: string[];
+  history?: ChatHistoryItem[];
 }

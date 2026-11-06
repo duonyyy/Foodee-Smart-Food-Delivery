@@ -7,6 +7,6 @@ export class GeneralChatFlowService {
   constructor(private readonly llmService: ChatLlmService) {}
 
   async reply(userMessage: string, context: ChatContext): Promise<ChatReply> {
-    return this.llmService.getGeneralReply(userMessage, context.menuFlat);
+    return this.llmService.getGeneralReply(userMessage, context.menuFlat, context.history);
   }
 }

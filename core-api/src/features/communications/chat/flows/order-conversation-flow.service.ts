@@ -4,7 +4,7 @@ import { AddressService } from 'src/features/locations/public-api';
 import { OrderMessagingService } from 'src/features/orders/public-api';
 import { ChatLlmService } from '../services/chat-llm.service';
 import { ChatOrderValidationService } from '../services/chat-order-validation.service';
-import { ChatAddress, ChatContext, ChatMetadata, ChatReply } from '../types/chat.types';
+import { ChatAddress, ChatContext, ChatHistoryItem, ChatMetadata, ChatReply } from '../types/chat.types';
 
 @Injectable()
 export class OrderConversationFlowService {
@@ -16,18 +16,103 @@ export class OrderConversationFlowService {
     @Optional() private readonly configService?: ConfigService,
   ) {}
 
-  isStartRequest(userMessage: string): boolean {
-    const lowerMessage = userMessage.toLowerCase();
-    return lowerMessage.includes('đặt món') || lowerMessage.includes('đặt đơn');
+  isStartRequest(userMessage: string, history?: ChatHistoryItem[]): boolean {
+    const lowerMessage = userMessage.toLowerCase().trim();
+
+    // Direct trigger keywords
+    const orderKeywords = [
+      'đặt món',
+      'đặt đơn',
+      'muốn đặt',
+      'cho mình đặt',
+      'cho tôi đặt',
+      'cho em đặt',
+      'đặt giúp',
+      'đặt cho',
+      'đặt luôn',
+      'order',
+      'oder',
+      'gọi món',
+    ];
+    if (orderKeywords.some((kw) => lowerMessage.includes(kw))) {
+      return true;
+    }
+
+    // Direct quantity phrasing like "cho 1 phở bò", "lấy 2 phần cơm tấm"
+    const orderPrefixRegex = /^(cho|lấy|mua|gọi|đặt)\s+(\d+|một|hai|ba|bốn|năm|sáu|bảy|tám|chín|mười)\s+/iu;
+    if (orderPrefixRegex.test(lowerMessage)) {
+      return true;
+    }
+
+    // Contextual confirmation: user says "có", "ok", "được", "lấy món này", "tiếp tục"
+    // when bot just asked if they want to order or select a recommended dish
+    if (history && history.length > 0 && this.isPositiveConfirmation(userMessage)) {
+      const lastBot = [...history].reverse().find((h) => h.role === 'bot');
+      if (lastBot) {
+        const botText = lastBot.text.toLowerCase();
+        const isOrderPrompt =
+          botText.includes('có muốn đặt món này không') ||
+          botText.includes('muốn đặt món') ||
+          botText.includes('muốn chọn món nào') ||
+          botText.includes('chọn món nào') ||
+          botText.includes('hướng dẫn bạn đặt món');
+        if (isOrderPrompt) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
-  start(metadata: ChatMetadata): ChatReply {
-    metadata.isOrdering = true;
+  async start(
+    userMessageOrMetadata: string | ChatMetadata,
+    userId?: string,
+    metadata?: ChatMetadata,
+    context?: ChatContext,
+    history?: ChatHistoryItem[],
+  ): Promise<ChatReply> {
+    if (typeof userMessageOrMetadata === 'object' && userMessageOrMetadata !== null) {
+      const meta = userMessageOrMetadata as ChatMetadata;
+      meta.isOrdering = true;
+      return {
+        reply: 'Vui lòng cho mình biết bạn muốn đặt món gì?',
+        action: 'orderItems',
+        metadata: meta,
+      };
+    }
+
+    const userMessage = userMessageOrMetadata as string;
+    const actualMetadata = metadata!;
+    const actualContext = context!;
+    actualMetadata.isOrdering = true;
+
+    const trimmed = userMessage.trim().toLowerCase();
+    const isGenericKeyword =
+      trimmed === 'đặt món' ||
+      trimmed === 'đặt đơn' ||
+      trimmed === 'muốn đặt món' ||
+      trimmed === 'tôi muốn đặt món' ||
+      trimmed === 'order' ||
+      trimmed === 'oder';
+
+    if (!isGenericKeyword && userId && actualContext) {
+      const collected = await this.collectOrderItems(
+        userMessage,
+        userId,
+        actualMetadata,
+        actualContext,
+        history,
+      );
+      if (collected.action === 'confirmOrder') {
+        return collected;
+      }
+    }
 
     return {
       reply: 'Vui lòng cho mình biết bạn muốn đặt món gì?',
       action: 'orderItems',
-      metadata,
+      metadata: actualMetadata,
     };
   }
 
@@ -36,9 +121,10 @@ export class OrderConversationFlowService {
     userId: string,
     metadata: ChatMetadata,
     context: ChatContext,
+    history?: ChatHistoryItem[],
   ): Promise<ChatReply> {
     if (metadata.isOrdering && !metadata.isFoodConfirmed) {
-      return this.collectOrderItems(userMessage, userId, metadata, context);
+      return this.collectOrderItems(userMessage, userId, metadata, context, history);
     }
 
     if (metadata.isFoodConfirmed && !metadata.isRestaurantConfirmed) {
@@ -70,13 +156,19 @@ export class OrderConversationFlowService {
     userId: string,
     metadata: ChatMetadata,
     context: ChatContext,
+    history?: ChatHistoryItem[],
   ): Promise<ChatReply> {
-    if (this.isPositiveConfirmation(userMessage)) {
+    if (metadata.orderItems.length > 0 && this.isPositiveConfirmation(userMessage)) {
       metadata.isFoodConfirmed = true;
-      return this.continue('', userId, metadata, context);
+      return this.continue('', userId, metadata, context, history);
     }
 
-    const foodList = await this.llmService.parseOrderItems(userMessage, context.menuFlat);
+    const activeHistory = history || context.history;
+    const foodList = await this.llmService.parseOrderItems(
+      userMessage,
+      context.menuFlat,
+      activeHistory,
+    );
 
     if (foodList === null) {
       return {
@@ -290,7 +382,7 @@ export class OrderConversationFlowService {
     }
 
     return new RegExp(
-      `${tokenBoundary}(có|ok|okay|đồng ý|xác nhận|tiếp tục|yes)${endBoundary}`,
+      `${tokenBoundary}(có|ok|okay|đồng ý|xác nhận|tiếp tục|yes|được|đúng|chính xác|đặt luôn)${endBoundary}`,
       'u',
     ).test(lowerMessage);
   }

@@ -38,7 +38,7 @@ export class ChatOrderValidationService {
       return {
         valid: false,
         action: 'choosePayment',
-        reason: 'Bạn muốn thanh toán bằng COD hay card?',
+        reason: 'Please choose payment method: COD or card.',
       };
     }
 
@@ -47,7 +47,7 @@ export class ChatOrderValidationService {
       return {
         valid: false,
         action: 'chooseAddress',
-        reason: 'Bạn vui lòng chọn lại địa chỉ giao hàng trước khi thanh toán.',
+        reason: 'Please select a delivery address before checkout.',
       };
     }
 
@@ -57,7 +57,7 @@ export class ChatOrderValidationService {
       return {
         valid: false,
         action: 'chooseAddress',
-        reason: 'Địa chỉ giao hàng không hợp lệ. Bạn vui lòng chọn lại địa chỉ.',
+        reason: 'Invalid delivery address. Please select your address again.',
       };
     }
 
@@ -65,7 +65,7 @@ export class ChatOrderValidationService {
       return {
         valid: false,
         action: 'retryOrder',
-        reason: 'Thông tin món ăn chưa đầy đủ. Bạn vui lòng chọn món lại.',
+        reason: 'Order items information is incomplete. Please select items again.',
       };
     }
 
@@ -78,7 +78,7 @@ export class ChatOrderValidationService {
         return {
           valid: false,
           action: 'retryOrder',
-          reason: `Số lượng món "${item.name}" không hợp lệ. Bạn vui lòng chọn lại món.`,
+          reason: `Invalid quantity for item "${item.name}". Please reselect item.`,
         };
       }
 
@@ -87,7 +87,7 @@ export class ChatOrderValidationService {
         return {
           valid: false,
           action: 'retryOrder',
-          reason: `Không tìm thấy món "${item.name}" trong thực đơn hiện tại. Bạn vui lòng chọn lại món.`,
+          reason: `Item "${item.name}" not found in current menu. Please reselect item.`,
         };
       }
 
@@ -96,7 +96,7 @@ export class ChatOrderValidationService {
         return {
           valid: false,
           action: 'retryOrder',
-          reason: `Không xác định được cửa hàng của món "${item.name}". Bạn vui lòng chọn lại món.`,
+          reason: `Cannot determine restaurant for item "${item.name}". Please reselect item.`,
         };
       }
 
@@ -108,7 +108,7 @@ export class ChatOrderValidationService {
         return {
           valid: false,
           action: 'retryOrder',
-          reason: 'Các món trong đơn phải thuộc cùng một cửa hàng. Bạn vui lòng chọn lại món.',
+          reason: 'All items in an order must be from the same restaurant. Please reselect items.',
         };
       }
 
@@ -125,7 +125,7 @@ export class ChatOrderValidationService {
       return {
         valid: false,
         action: 'retryOrder',
-        reason: 'Không xác định được cửa hàng của đơn hàng. Bạn vui lòng chọn lại món.',
+        reason: 'Cannot determine restaurant for this order. Please reselect items.',
       };
     }
 

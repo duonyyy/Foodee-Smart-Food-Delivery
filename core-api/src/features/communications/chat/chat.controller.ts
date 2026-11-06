@@ -24,7 +24,7 @@ export class ChatController {
     @Req() req: AuthenticatedRequest,
   ): Promise<ChatReply> {
     const userId = req.user?.id;
-    return this.chatService.generateReply(body.userMessage, userId, body.metadata);
+    return this.chatService.generateReply(body.userMessage, userId, body.metadata, body.history);
   }
 
   @UseGuards(OptionalAuthGuard)
@@ -46,6 +46,7 @@ export class ChatController {
         body.userMessage,
         userId,
         body.metadata,
+        body.history,
       );
       const text = result.reply || '';
       const chunkSize = 20;

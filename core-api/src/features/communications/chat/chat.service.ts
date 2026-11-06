@@ -3,7 +3,7 @@ import { GeneralChatFlowService } from './flows/general-chat-flow.service';
 import { OrderConversationFlowService } from './flows/order-conversation-flow.service';
 import { QuickReorderFlowService } from './flows/quick-reorder-flow.service';
 import { ChatContextService } from './services/chat-context.service';
-import { ChatMetadata, ChatReply } from './types/chat.types';
+import { ChatHistoryItem, ChatMetadata, ChatReply } from './types/chat.types';
 import { createInitialChatMetadata, normalizeChatMetadata } from './utils/chat-metadata.factory';
 
 @Injectable()
@@ -20,6 +20,7 @@ export class ChatService {
     userMessage: string,
     userId?: string,
     metadata?: Partial<ChatMetadata> | null,
+    history?: ChatHistoryItem[],
   ): Promise<ChatReply> {
     try {
       const normalizedMessage = String(userMessage || '').trim();
@@ -53,7 +54,7 @@ export class ChatService {
       }
 
       const isStartOrder =
-        this.orderConversationFlowService.isStartRequest(normalizedMessage) &&
+        this.orderConversationFlowService.isStartRequest(normalizedMessage, history) &&
         !chatMetadata.isOrdering;
       const isOrdering = this.isOrderInProgress(chatMetadata);
 
@@ -67,25 +68,66 @@ export class ChatService {
           };
         }
 
+        const context = await this.chatContextService.getContext(userId);
+        context.history = history;
+
         if (isStartOrder) {
-          return this.orderConversationFlowService.start(chatMetadata);
+          return this.orderConversationFlowService.start(
+            normalizedMessage,
+            userId,
+            chatMetadata,
+            context,
+            history,
+          );
         }
 
-        const context = await this.chatContextService.getContext(userId);
         return this.orderConversationFlowService.continue(
           normalizedMessage,
           userId,
           chatMetadata,
           context,
+          history,
         );
       }
 
       const context = await this.chatContextService.getContext(userId);
-      return this.generalChatFlowService.reply(normalizedMessage, context);
+      context.history = history;
+      const generalReply = await this.generalChatFlowService.reply(normalizedMessage, context);
+
+      if (
+        generalReply.action === 'orderItems' &&
+        generalReply.suggestions &&
+        generalReply.suggestions.length > 0 &&
+        userId
+      ) {
+        chatMetadata.isOrdering = true;
+        chatMetadata.orderItems = generalReply.suggestions.map((s) => {
+          const menuItem = context.menuFlat.find((m) => m.id === s.id);
+          return {
+            id: s.id,
+            name: s.name,
+            price: s.price,
+            quantity: 1,
+            restaurantId: menuItem?.restaurantId || s.restaurantId || '',
+            restaurantName: menuItem?.restaurantName || s.restaurantName,
+          };
+        });
+        const summary = chatMetadata.orderItems
+          .map((item) => `${item.quantity} ${item.name}`)
+          .join(', ');
+        return {
+          reply: `${generalReply.reply}\n\nĐơn hàng dự kiến của bạn: ${summary}. Bạn có muốn tiếp tục tạo đơn này không?`,
+          action: 'confirmOrder',
+          suggestions: generalReply.suggestions,
+          metadata: chatMetadata,
+        };
+      }
+
+      return generalReply;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`[ChatService.generateReply] Error: ${message}`);
-      throw new Error('Không thể tạo phản hồi từ hệ thống.');
+      throw new Error('Unable to generate system response.');
     }
   }
 

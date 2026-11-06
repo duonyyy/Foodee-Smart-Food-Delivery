@@ -190,7 +190,7 @@ export class QuickReorderFlowService {
       if (!item.foodId) {
         return {
           items: [],
-          error: `Không thể xác định mã món "${item.foodName}" để kiểm tra lại thực đơn.`,
+          error: `Cannot identify item ID for "${item.foodName}" to verify menu.`,
         };
       }
 
@@ -201,7 +201,7 @@ export class QuickReorderFlowService {
       if (!food) {
         return {
           items: [],
-          error: `Không thể tìm thấy món "${item.foodName}" trong thực đơn hiện tại.`,
+          error: `Cannot find item "${item.foodName}" in the current menu.`,
         };
       }
       items.push({ foodId: food.foodId, quantity: item.quantity });

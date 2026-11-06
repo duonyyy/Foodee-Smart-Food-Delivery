@@ -13,11 +13,19 @@ class ChatMenuItem(BaseModel):
     restaurantId: str
 
 
+class ChatHistoryItem(BaseModel):
+    """A single turn in recent conversation history."""
+
+    role: str  # "user" or "bot" / "assistant"
+    text: str
+
+
 class GeneralReplyRequest(BaseModel):
     """Request body for general chat reply endpoint."""
 
     userMessage: str
     menuFlat: list[ChatMenuItem] = []
+    history: list[ChatHistoryItem] = []
 
 
 class ParseOrderItemsRequest(BaseModel):
@@ -25,3 +33,4 @@ class ParseOrderItemsRequest(BaseModel):
 
     userMessage: str
     menuFlat: list[ChatMenuItem] = []
+    history: list[ChatHistoryItem] = []
